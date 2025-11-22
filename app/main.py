@@ -26,4 +26,5 @@ app.include_router(tests.router)
 
 @app.get("/")
 def root():
-    return {"status": "ok"}
+    return {"status": "ok", "version": "2"}
+
