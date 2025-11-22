@@ -13,7 +13,6 @@ def get_db():
         db.close()
 
 
-# Извлекаем токен из куки
 def get_current_user(request: Request, db=Depends(get_db)) -> User:
     token = request.cookies.get("access_token")
     if not token:
@@ -29,3 +28,15 @@ def get_current_user(request: Request, db=Depends(get_db)) -> User:
         raise HTTPException(status_code=401, detail="User not found")
 
     return user
+
+
+def require_role(*roles: str):
+    """
+    Использование:
+      user: User = Depends(require_role("admin", "teacher"))
+    """
+    def dependency(user: User = Depends(get_current_user)):
+        if user.role not in roles:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return user
+    return dependency

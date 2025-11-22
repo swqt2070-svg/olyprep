@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Form, Response
 from sqlalchemy.orm import Session
 from app.models import User
 from app.security import hash_password, verify_password, create_token
-from app.deps import get_db
+from app.deps import get_db, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -13,13 +13,18 @@ def register(
     password: str = Form(...),
     db: Session = Depends(get_db)
 ):
+    # если пользователь с таким email уже есть
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(400, "email exists")
 
-    user = User(email=email, password_hash=hash_password(password))
+    # если это самый первый пользователь в системе — делаем его admin
+    total_users = db.query(User).count()
+    role = "admin" if total_users == 0 else "student"
+
+    user = User(email=email, password_hash=hash_password(password), role=role)
     db.add(user)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "role": role}
 
 
 @router.post("/login")
@@ -35,5 +40,9 @@ def login(
 
     token = create_token({"id": user.id, "role": user.role})
     response.set_cookie("access_token", token, httponly=True)
-
     return {"ok": True, "role": user.role}
+
+
+@router.get("/me")
+def me(user: User = Depends(get_current_user)):
+    return {"id": user.id, "email": user.email, "role": user.role}

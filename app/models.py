@@ -10,7 +10,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    role = Column(String, default="student")  # admin | teacher | student
+    # роли: admin / teacher / student
+    role = Column(String, default="student")
 
 
 # -------- Вопрос --------
@@ -19,9 +20,9 @@ class Question(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     text = Column(Text, nullable=False)
-    answer_type = Column(String, nullable=False)  # text | single
-    options = Column(Text, nullable=True)         # JSON string if single
-    correct = Column(Text, nullable=False)        # text or index
+    answer_type = Column(String, nullable=False)  # "text" | "single"
+    options = Column(Text, nullable=True)         # JSON строка для single
+    correct = Column(Text, nullable=False)        # текст или индекс
 
 
 # -------- Тест --------

@@ -2,15 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import json
 
-from app.deps import get_db
-from app.models import Question
+from app.deps import get_db, require_role
+from app.models import Question, User
 from app.schemas import QuestionCreate, QuestionOut
 
 router = APIRouter(prefix="/questions", tags=["questions"])
 
 
 @router.post("", response_model=QuestionOut)
-def create_question(payload: QuestionCreate, db: Session = Depends(get_db)):
+def create_question(
+    payload: QuestionCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher"))
+):
     if payload.answer_type not in ("text", "single"):
         raise HTTPException(400, "answer_type must be 'text' or 'single'")
 

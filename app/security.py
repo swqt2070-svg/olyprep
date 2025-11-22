@@ -2,7 +2,7 @@ from passlib.hash import pbkdf2_sha256
 import jwt
 import datetime
 
-SECRET_KEY = "CHANGE_ME_LATER"
+SECRET_KEY = "CHANGE_ME_LATER"  # потом вынесем в .env
 ALGORITHM = "HS256"
 
 
