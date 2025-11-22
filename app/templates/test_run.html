@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Тест {{ test.title }} — OlyPrep{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title">Тест: {{ test.title }}</div>
+        <div class="page-subtitle">
+            {% if user.role in ['admin','teacher'] %}
+                Конструктор теста: добавление задач и просмотр структуры.
+            {% else %}
+                Ответьте на все задачи и отправьте результаты для проверки.
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="/ui/tests" class="btn btn-ghost">← К списку тестов</a>
+    </div>
+</div>
+
+<div class="test-grid">
+    <section class="card">
+        <div class="card-header-inline">
+            <h2 style="font-size:1.05rem;">Список задач</h2>
+            <span class="badge">
+                {{ items|length }} задач{% if max_points is not none %}, максимум {{ max_points }} баллов{% endif %}
+            </span>
+        </div>
+
+        {% if items|length == 0 %}
+            <p class="muted">В этот тест пока не добавлено ни одной задачи.</p>
+        {% else %}
+            <ol style="margin-left:1.1rem; margin-top:0.5rem;">
+                {% for item in items %}
+                    <li style="margin-bottom:0.7rem;">
+                        <div style="font-size:0.92rem; margin-bottom:0.2rem;">{{ item.q.text }}</div>
+                        <div class="muted">
+                            {% if item.q.answer_type == 'text' %}
+                                <span class="badge badge-blue">текстовый ответ</span>
+                            {% else %}
+                                <span class="badge badge-green">один вариант</span>
+                            {% endif %}
+                            · {{ item.tq.points }} балл(ов)
+                        </div>
+                    </li>
+                {% endfor %}
+            </ol>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        {% if user.role in ['admin','teacher'] %}
+            <h2 style="font-size:1.05rem;">Добавить задачу</h2>
+            <form method="post" action="/ui/tests/{{ test.id }}/add-question" class="form" style="margin-top:0.5rem;">
+                <div class="field">
+                    <label class="field-label">ID задачи</label>
+                    <input type="text" name="question_id" placeholder="Например: 1" required>
+                </div>
+                <div class="field">
+                    <label class="field-label">Баллы за задачу</label>
+                    <input type="text" name="points" value="1">
+                </div>
+                <button type="submit" class="btn btn-primary">Добавить</button>
+            </form>
+            <p class="muted" style="margin-top:0.75rem;">
+                ID задач можно посмотреть в <a href="/ui/questions">библиотеке задач</a>.
+            </p>
+            <hr style="border:none; border-top:1px solid rgba(148,163,184,0.35); margin:1rem 0;">
+        {% endif %}
+
+        {% if user.role not in ['admin','teacher'] %}
+            {% if not submission %}
+                <h2 style="font-size:1.05rem;">Начать попытку</h2>
+                <p class="muted" style="margin-top:0.4rem;">После начала попытки вы сможете ввести ответы на все задачи и отправить их на проверку.</p>
+                <form method="post" action="/ui/tests/{{ test.id }}/start" style="margin-top:0.7rem;">
+                    <button type="submit" class="btn btn-primary">Начать тест</button>
+                </form>
+            {% else %}
+                <h2 style="font-size:1.05rem;">Ответы</h2>
+                {% if result %}
+                    <div class="result-box">
+                        <h3>Результат</h3>
+                        <p>Набрано {{ result.score }} из {{ result.max_points }} возможных баллов.</p>
+                    </div>
+                {% endif %}
+                <form method="post" action="/ui/tests/{{ test.id }}/submit" class="form" style="margin-top:0.75rem;">
+                    <input type="hidden" name="submission_id" value="{{ submission.id }}">
+
+                    <div class="answers-grid">
+                        {% for item in items %}
+                            <div class="field">
+                                <div class="field-label">Задача #{{ loop.index }}</div>
+                                <div class="muted" style="margin-bottom:0.2rem;">{{ item.q.text }}</div>
+                                <div class="answer-input">
+                                    {% if item.q.answer_type == 'text' %}
+                                        <input type="text" name="answer_{{ item.q.id }}" placeholder="Ваш ответ">
+                                    {% else %}
+                                        {% set opts = item.options or [] %}
+                                        {% for opt in opts %}
+                                            <label>
+                                                <input type="radio" name="answer_{{ item.q.id }}" value="{{ loop.index0 }}">
+                                                {{ opt }}
+                                            </label><br>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top:0.9rem;">Отправить на проверку</button>
+                </form>
+            {% endif %}
+        {% else %}
+            <p class="muted">Как учитель или администратор вы можете добавлять задачи в этот тест. Просмотр прохождения будет реализован позже.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

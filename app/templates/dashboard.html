@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Дашборд — OlyPrep{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title">Привет, {{ user.email }}</div>
+        <div class="page-subtitle">
+            {% if user.role == 'admin' %}
+                У вас полный доступ: администрирование, создание тестов и задач.
+            {% elif user.role == 'teacher' %}
+                Вы можете создавать тренировочные наборы задач и выдавать тесты.
+            {% else %}
+                Вы можете проходить тесты, решать задачи и отслеживать прогресс.
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid">
+    <section class="card">
+        <h2 style="font-size:1.1rem;">Навигация</h2>
+        <div class="kpi-row">
+            {% if user.role in ['admin', 'teacher'] %}
+            <div class="stat-card">
+                <div class="stat-label">Работа с задачами</div>
+                <div class="stat-value">Библиотека</div>
+                <div class="stat-meta">
+                    Просмотр, добавление и редактирование задач для подготовки.
+                </div>
+                <div style="margin-top:0.6rem; display:flex; gap:0.5rem;">
+                    <a class="btn btn-primary" href="/ui/questions">Открыть библиотеку</a>
+                    <a class="btn btn-ghost" href="/ui/questions/new">Новая задача</a>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Работа с тестами</div>
+                <div class="stat-value">Тесты</div>
+                <div class="stat-meta">
+                    Создание авторских тестов из задач библиотеки, выдача ученикам.
+                </div>
+                <div style="margin-top:0.6rem; display:flex; gap:0.5rem;">
+                    <a class="btn btn-primary" href="/ui/tests">Список тестов</a>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="stat-card">
+                <div class="stat-label">Тренировка</div>
+                <div class="stat-value">Решение задач</div>
+                <div class="stat-meta">
+                    Проходите тесты, тренируйтесь на задачах прошлых лет и отслеживайте прогресс.
+                </div>
+                <div style="margin-top:0.6rem; display:flex; gap:0.5rem;">
+                    <a class="btn btn-primary" href="/ui/tests">Перейти к тестам</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <aside class="card">
+        <h2 style="font-size:1.05rem;">Быстрый старт</h2>
+        {% if user.role in ['admin', 'teacher'] %}
+            <ul class="muted" style="margin-top:0.75rem; list-style:none;">
+                <li style="margin-bottom:0.4rem;">1. Создайте несколько задач в <a href="/ui/questions/new">библиотеке задач</a>.</li>
+                <li style="margin-bottom:0.4rem;">2. Соберите из них тест в разделе <a href="/ui/tests">тестов</a>.</li>
+                <li style="margin-bottom:0.4rem;">3. Дайте ученикам ссылку на тест или выведите список доступных тестов.</li>
+            </ul>
+        {% else %}
+            <p class="muted" style="margin-top:0.75rem;">
+                Откройте раздел <a href="/ui/tests">«Тесты»</a> и выберите набор задач для тренировки.
+            </p>
+        {% endif %}
+        <p class="muted" style="margin-top:0.5rem;">
+            Платформа сейчас в режиме MVP — набор функций будет постепенно расширяться.
+        </p>
+    </aside>
+</div>
+{% endblock %}

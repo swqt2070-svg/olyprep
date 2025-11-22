@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Вход — OlyPrep{% endblock %}
+{% block content %}
+<div class="center">
+    <div class="card card-narrow">
+        <div class="card-header-inline">
+            <h1>Вход в систему</h1>
+            <div class="chip">
+                <span class="chip-dot"></span>
+                <span>доступ к заданиям и тестам</span>
+            </div>
+        </div>
+        {% if error %}
+            <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        <form method="post" action="/ui/login" class="form">
+            <div class="field">
+                <label class="field-label">Почта <span>*</span></label>
+                <input type="text" name="email" required placeholder="you@example.com">
+            </div>
+            <div class="field">
+                <label class="field-label">Пароль <span>*</span></label>
+                <input type="password" name="password" required placeholder="••••••••">
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-top:0.2rem;">Войти</button>
+        </form>
+        <p class="muted" style="margin-top:0.9rem;">
+            Нет аккаунта? <a href="/ui/register">Зарегистрироваться</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

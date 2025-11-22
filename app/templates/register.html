@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Регистрация — OlyPrep{% endblock %}
+{% block content %}
+<div class="center">
+    <div class="card card-narrow">
+        <div class="card-header-inline">
+            <h1>Регистрация</h1>
+            <div class="chip">
+                <span class="chip-dot"></span>
+                <span>первый пользователь станет админом</span>
+            </div>
+        </div>
+        {% if error %}
+            <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+            <div class="alert alert-success">{{ success }}</div>
+        {% endif %}
+        <form method="post" action="/ui/register" class="form">
+            <div class="field">
+                <label class="field-label">Почта <span>*</span></label>
+                <input type="text" name="email" required placeholder="you@example.com">
+            </div>
+            <div class="field">
+                <label class="field-label">Пароль <span>*</span></label>
+                <input type="password" name="password" required placeholder="минимум 6 символов">
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-top:0.2rem;">Создать аккаунт</button>
+        </form>
+        <p class="muted" style="margin-top:0.9rem;">
+            Уже есть аккаунт? <a href="/ui/login">Войти</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

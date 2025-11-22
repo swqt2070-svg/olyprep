@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Библиотека задач — OlyPrep{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title">Библиотека задач</div>
+        <div class="page-subtitle">
+            Все задачи, импортированные или созданные вручную. Используйте их для подготовки и сборки тестов.
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if user.role in ['admin', 'teacher'] %}
+            <a href="/ui/questions/new" class="btn btn-primary">Новая задача</a>
+        {% endif %}
+    </div>
+</div>
+
+<section class="card table-card">
+    {% if questions|length == 0 %}
+        <p class="muted">Пока нет задач. {% if user.role in ['admin','teacher'] %}Создайте первую через кнопку «Новая задача».{% endif %}</p>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:60px;">ID</th>
+                    <th>Текст</th>
+                    <th style="width:120px;">Тип ответа</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for q in questions %}
+                    <tr>
+                        <td>#{{ q.id }}</td>
+                        <td>{{ q.text[:140] }}{% if q.text|length > 140 %}…{% endif %}</td>
+                        <td>
+                            {% if q.answer_type == 'text' %}
+                                <span class="badge badge-blue">текст</span>
+                            {% elif q.answer_type == 'single' %}
+                                <span class="badge badge-green">один из вариантов</span>
+                            {% else %}
+                                <span class="badge">{{ q.answer_type }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</section>
+{% endblock %}

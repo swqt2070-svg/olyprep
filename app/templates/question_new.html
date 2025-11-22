@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Новая задача — OlyPrep{% endblock %}
+{% block extra_head %}
+<script>
+    function toggleAnswerType() {
+        const checked = document.querySelector('input[name="answer_type"]:checked');
+        const type = checked ? checked.value : 'text';
+        const singleBlock = document.getElementById('single-answer-block');
+        const textBlock = document.getElementById('text-answer-block');
+        if (type === 'single') {
+            singleBlock.style.display = 'block';
+            textBlock.style.display = 'none';
+        } else {
+            singleBlock.style.display = 'none';
+            textBlock.style.display = 'block';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('input[name="answer_type"]').forEach(function(el) {
+            el.addEventListener('change', toggleAnswerType);
+        });
+        toggleAnswerType();
+    });
+</script>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title">Новая задача</div>
+        <div class="page-subtitle">
+            Добавьте задачу в общую библиотеку. Её можно будет использовать в произвольных тестах.
+        </div>
+    </div>
+</div>
+
+<section class="card">
+    {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+    {% if success %}
+        <div class="alert alert-success">{{ success }}</div>
+    {% endif %}
+
+    <form method="post" action="/ui/questions/new" class="form">
+        <div class="field">
+            <label class="field-label">Текст задачи <span>*</span></label>
+            <textarea name="text" required placeholder="Сформулируйте условие задачи..."></textarea>
+        </div>
+
+        <div class="field">
+            <label class="field-label">Тип ответа</label>
+            <div class="pill-group">
+                <label class="pill">
+                    <input type="radio" name="answer_type" value="text" checked style="margin-right:0.3rem;">
+                    Текст
+                </label>
+                <label class="pill">
+                    <input type="radio" name="answer_type" value="single" style="margin-right:0.3rem;">
+                    Один вариант
+                </label>
+            </div>
+        </div>
+
+        <div id="text-answer-block" class="field">
+            <label class="field-label">Правильный ответ (текст)</label>
+            <input type="text" name="correct_text" placeholder="Например: Париж">
+            <p class="muted">Сравнение производится без учёта регистра и лишних пробелов.</p>
+        </div>
+
+        <div id="single-answer-block" class="field" style="display:none;">
+            <label class="field-label">Варианты ответа</label>
+            <div class="question-options-grid">
+                {% for idx in range(4) %}
+                <div class="option-field">
+                    <input type="radio" name="correct_index" value="{{ idx }}">
+                    <input type="text" name="option_{{ idx }}" placeholder="Вариант {{ idx + 1 }}">
+                </div>
+                {% endfor %}
+            </div>
+            <p class="muted" style="margin-top:0.4rem;">
+                Укажите варианты и выберите один правильный. Пустые варианты будут проигнорированы.
+            </p>
+        </div>
+
+        <div style="margin-top:0.9rem; display:flex; gap:0.6rem;">
+            <button type="submit" class="btn btn-primary">Сохранить задачу</button>
+            <a href="/ui/questions" class="btn btn-ghost">Назад к списку</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

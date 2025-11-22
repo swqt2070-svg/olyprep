@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
 from app import models
-from app.routers import auth, users, questions, tests
+from app.routers import auth, users, questions, tests, ui  # ← ДОБАВЛЕН ui
 
 app = FastAPI(title="OlyPrep MVP")
 
@@ -21,8 +21,8 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(questions.router)
 app.include_router(tests.router)
-
+app.include_router(ui.router)  # ← ДОБАВЛЕНО
 
 @app.get("/")
 def root():
-    return {"status": "ok", "version": "3"}
+    return {"status": "ok", "version": "3.1 UI"}
