@@ -24,7 +24,6 @@ from app.security import hash_password, verify_password, create_token
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
 
-# Коды приглашения
 STUDENT_INVITE_CODE = "STUDENT2025"
 TEACHER_INVITE_CODE = "TEACHER2025"
 
@@ -46,7 +45,6 @@ def build_account_context(
     student_results = None
     teacher_results = None
 
-    # История попыток ученика
     if user.role == "student":
         submissions: List[Submission] = (
             db.query(Submission)
@@ -74,7 +72,6 @@ def build_account_context(
             )
         student_results = results
 
-    # Результаты учеников (видят teacher/admin)
     if user.role in ("teacher", "admin"):
         students: List[User] = db.query(User).filter(User.role == "student").all()
         students_map = {s.id: s for s in students}
@@ -195,7 +192,6 @@ async def register_submit(
 
     has_admin = db.query(User).filter(User.role == "admin").first() is not None
 
-    # Первый пользователь — admin без кода
     if not has_admin:
         role = "admin"
     else:
@@ -254,7 +250,7 @@ async def dashboard(request: Request, user: User = Depends(get_current_user)):
     )
 
 
-# ---------- ЛИЧНЫЙ КАБИНЕТ (/ui/account) ----------
+# ---------- ЛИЧНЫЙ КАБИНЕТ ----------
 
 
 @router.get("/account", response_class=HTMLResponse)
@@ -372,17 +368,77 @@ async def admin_set_role(
 
 def parse_markdown_to_question(raw: str) -> Optional[dict]:
     """
-    Очень простой парсер:
-    ищет строку вида "Ответ: ..." или "Answer: ..." и считает всё выше — текстом задачи.
+    1) Пытаемся вытащить текст между заголовками "# Вопрос" и "# Ответ".
+       Ответом считаем первую непустую строку после "# Ответ".
+    2) Если таких заголовков нет — fallback к старому формату "Ответ: ...".
     """
-    text = raw.strip()
+    text = raw.replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         return None
 
-    lines = text.splitlines()
+    lines = text.split("\n")
+
+    # --- 1. Формат с "# Вопрос" / "# Ответ" ---
+    q_idx = None
+    a_idx = None
+    for i, line in enumerate(lines):
+        l = line.strip().lower()
+        if q_idx is None and (
+            l.startswith("# вопрос")
+            or l == "вопрос"
+            or l.startswith("## вопрос")
+        ):
+            q_idx = i
+        elif q_idx is not None and a_idx is None and (
+            l.startswith("# ответ")
+            or l == "ответ"
+            or l.startswith("## ответ")
+        ):
+            a_idx = i
+            break
+
+    if q_idx is not None and a_idx is not None and a_idx > q_idx:
+        q_lines = lines[q_idx + 1 : a_idx]
+        a_lines = lines[a_idx + 1 :]
+
+        def strip_empty(lst: List[str]) -> List[str]:
+            start = 0
+            while start < len(lst) and not lst[start].strip():
+                start += 1
+            end = len(lst)
+            while end > start and not lst[end - 1].strip():
+                end -= 1
+            return lst[start:end]
+
+        q_lines = strip_empty(q_lines)
+        a_lines = strip_empty(a_lines)
+
+        if not a_lines:
+            return None
+
+        answer_line = ""
+        for l in a_lines:
+            s = l.strip()
+            if s:
+                answer_line = s
+                break
+        if not answer_line:
+            return None
+
+        question_text = "\n".join(q_lines).strip()
+        if not question_text:
+            question_text = text
+
+        return {
+            "text": question_text,
+            "answer_type": "text",
+            "correct": answer_line,
+            "options_json": None,
+        }
+
+    # --- 2. Fallback: строка "Ответ: ..." в одной строке ---
     answer_idx = None
     answer_value = None
-
     for idx, line in enumerate(lines):
         m = re.search(r"(Ответ|Answer)\s*[:\-]\s*(.+)", line, re.IGNORECASE)
         if m:
@@ -391,7 +447,6 @@ def parse_markdown_to_question(raw: str) -> Optional[dict]:
             break
 
     if answer_idx is None or not answer_value:
-        # нет явной строки "Ответ:" — пропускаем файл
         return None
 
     question_text = "\n".join(lines[:answer_idx]).strip()
@@ -431,7 +486,6 @@ async def import_submit(
 ):
     filename = archive.filename or ""
     filename_lower = filename.lower()
-    error: Optional[str] = None
 
     if not filename_lower.endswith(".zip"):
         return templates.TemplateResponse(
@@ -465,7 +519,6 @@ async def import_submit(
     created_questions: List[Question] = []
 
     for name in zf.namelist():
-        # пропускаем папки и не-.md
         if name.endswith("/") or not name.lower().endswith(".md"):
             continue
 
@@ -491,7 +544,7 @@ async def import_submit(
             correct=parsed["correct"],
         )
         db.add(q)
-        db.flush()  # чтобы получить q.id до commit
+        db.flush()
         created_questions.append(q)
         imported_count += 1
 
@@ -515,7 +568,7 @@ async def import_submit(
     )
 
 
-# ---------- QUESTIONS UI (список, создание, редактирование, удаление) ----------
+# ---------- QUESTIONS: список / создание / редактирование / удаление ----------
 
 
 @router.get("/questions", response_class=HTMLResponse)
