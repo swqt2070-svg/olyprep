@@ -1060,20 +1060,220 @@ async def tests_list(
     user: User = Depends(get_current_user),
 ):
     tests = db.query(Test).order_by(Test.id.desc()).all()
+    info = []
+    for t in tests:
+        tqs: List[TestQuestion] = (
+            db.query(TestQuestion)
+            .filter(TestQuestion.test_id == t.id)
+            .all()
+        )
+        info.append(
+            {
+                "test": t,
+                "question_count": len(tqs),
+                "max_score": sum(tq.points for tq in tqs) if tqs else 0,
+            }
+        )
+    role = user.role if user else None
     return templates.TemplateResponse(
         "tests_list.html",
-        {"request": request, "user": user, "tests": tests},
+        {"request": request, "user": user, "tests": tests, "test_info": info, "role": role},
     )
 
 
-@router.post("/tests/new")
-async def tests_new(
-    title: str = Form(...),
+@router.get("/tests/new", response_class=HTMLResponse)
+async def test_builder_new(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "teacher")),
 ):
-    t = Test(title=title.strip())
+    questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
+    return templates.TemplateResponse(
+        "test_builder.html",
+        {
+            "request": request,
+            "user": user,
+            "mode": "create",
+            "test": None,
+            "questions": questions,
+            "selected": {},
+        },
+    )
+
+
+@router.post("/tests/new", response_class=HTMLResponse)
+async def test_builder_new_post(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    form = await request.form()
+    title = (form.get("title") or "").strip()
+    description = (form.get("description") or "").strip()
+    show_correct = "show_correct_answers" in form
+
+    questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
+    selection: list[tuple[int, int]] = []
+    for q in questions:
+        if form.get(f"q_{q.id}_include") is None:
+            continue
+        try:
+            points = int(form.get(f"q_{q.id}_points") or 1)
+        except ValueError:
+            points = 1
+        selection.append((q.id, max(points, 0)))
+
+    if not title:
+        error = "Укажите название теста"
+    elif not selection:
+        error = "Выберите хотя бы один вопрос"
+    else:
+        error = None
+
+    if error:
+        return templates.TemplateResponse(
+            "test_builder.html",
+            {
+                "request": request,
+                "user": user,
+                "mode": "create",
+                "test": None,
+                "questions": questions,
+                "selected": {},
+                "error": error,
+            },
+            status_code=400,
+        )
+
+    t = Test(
+        title=title,
+        description=description or None,
+        show_answers_to_student=show_correct,
+        created_by_id=user.id if hasattr(user, "id") else None,
+    )
     db.add(t)
+    db.flush()
+
+    order = 0
+    for question_id, points in selection:
+        order += 1
+        tq = TestQuestion(
+            test_id=t.id,
+            question_id=question_id,
+            points=points,
+            order=order,
+        )
+        db.add(tq)
+
+    db.commit()
+    return redirect("/ui/tests")
+
+
+@router.get("/tests/{test_id}/edit", response_class=HTMLResponse)
+async def test_builder_edit(
+    test_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    test = db.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="test not found")
+
+    questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
+    tqs: List[TestQuestion] = (
+        db.query(TestQuestion)
+        .filter(TestQuestion.test_id == test.id)
+        .all()
+    )
+    selected = {tq.question_id: tq for tq in tqs}
+
+    return templates.TemplateResponse(
+        "test_builder.html",
+        {
+            "request": request,
+            "user": user,
+            "mode": "edit",
+            "test": test,
+            "questions": questions,
+            "selected": selected,
+        },
+    )
+
+
+@router.post("/tests/{test_id}/edit", response_class=HTMLResponse)
+async def test_builder_edit_post(
+    test_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    test = db.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="test not found")
+
+    form = await request.form()
+    title = (form.get("title") or "").strip()
+    description = (form.get("description") or "").strip()
+    show_correct = "show_correct_answers" in form
+
+    questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
+    selection: list[tuple[int, int]] = []
+    for q in questions:
+        if form.get(f"q_{q.id}_include") is None:
+            continue
+        try:
+            points = int(form.get(f"q_{q.id}_points") or 1)
+        except ValueError:
+            points = 1
+        selection.append((q.id, max(points, 0)))
+
+    if not title:
+        error = "Укажите название теста"
+    elif not selection:
+        error = "Выберите хотя бы один вопрос"
+    else:
+        error = None
+
+    if error:
+        tqs: List[TestQuestion] = (
+            db.query(TestQuestion)
+            .filter(TestQuestion.test_id == test.id)
+            .all()
+        )
+        selected = {tq.question_id: tq for tq in tqs}
+        return templates.TemplateResponse(
+            "test_builder.html",
+            {
+                "request": request,
+                "user": user,
+                "mode": "edit",
+                "test": test,
+                "questions": questions,
+                "selected": selected,
+                "error": error,
+            },
+            status_code=400,
+        )
+
+    test.title = title
+    test.description = description or None
+    test.show_answers_to_student = show_correct
+    db.add(test)
+
+    db.query(TestQuestion).filter(TestQuestion.test_id == test.id).delete()
+
+    order = 0
+    for question_id, points in selection:
+        order += 1
+        tq = TestQuestion(
+            test_id=test.id,
+            question_id=question_id,
+            points=points,
+            order=order,
+        )
+        db.add(tq)
+
     db.commit()
     return redirect("/ui/tests")
 
@@ -1103,7 +1303,7 @@ async def test_view(
             continue
         opts = json.loads(q.options) if q.options else None
         max_points += tq.points
-        items.append({"tq": tq, "q": q, "options": opts})
+        items.append({"tq": tq, "q": q, "options": opts, "given": given, "earned": earned})
 
     submission = None
     if submission_id is not None:
@@ -1233,6 +1433,59 @@ async def test_submit(
 
     test = db.get(Test, test_id)
     result = {"score": score, "max_points": max_points}
+
+    if test.show_answers_to_student:
+        rows = []
+        for idx, item in enumerate(items, 1):
+            q = item["q"]
+            opts = item["options"]
+            given_raw = item.get("given") or ""
+
+            your_answer = given_raw or "—"
+            correct_answer = ""
+
+            if q.answer_type == "text":
+                correct_answer = (q.correct or "").strip()
+            elif q.answer_type == "single":
+                # map numeric index to option text
+                try:
+                    c_idx = int(q.correct) if q.correct is not None else None
+                except (TypeError, ValueError):
+                    c_idx = None
+                if c_idx is not None and opts and 0 <= c_idx < len(opts):
+                    correct_answer = str(opts[c_idx])
+                else:
+                    correct_answer = str(q.correct or "")
+
+                try:
+                    g_idx = int(given_raw)
+                    if opts and 0 <= g_idx < len(opts):
+                        your_answer = str(opts[g_idx])
+                except (TypeError, ValueError):
+                    pass
+
+            rows.append(
+                {
+                    "index": idx,
+                    "question": q,
+                    "your_answer": your_answer,
+                    "correct_answer": correct_answer,
+                    "score": item.get("earned", 0),
+                    "max_points": next((tq.points for tq in tqs if tq.question_id == q.id), 0),
+                }
+            )
+
+        return templates.TemplateResponse(
+            "test_result.html",
+            {
+                "request": request,
+                "user": user,
+                "test": test,
+                "rows": rows,
+                "total_score": score,
+                "max_total": max_points,
+            },
+        )
 
     return templates.TemplateResponse(
         "test_run.html",
