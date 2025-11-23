@@ -1,13 +1,9 @@
 from fastapi import Depends, HTTPException, Request
 from app.database import SessionLocal
 from app.models import User
-from app.security import SECRET_KEY, decode_token  # если decode_token нет, см. ниже
+from app.security import SECRET_KEY
 import jwt
 
-# Если у тебя нет функции decode_token в security.py, можно использовать напрямую jwt.decode:
-# from app.security import SECRET_KEY
-# import jwt
-# и в get_current_user вызывать jwt.decode(...)
 
 def get_db():
     db = SessionLocal()
@@ -40,7 +36,7 @@ def get_current_user(request: Request, db=Depends(get_db)) -> User:
 def require_role(*roles: str):
     """
     Универсальная проверка ролей.
-    Использование:
+    Пример:
       user: User = Depends(require_role("admin", "teacher"))
     """
     def dependency(user: User = Depends(get_current_user)):
@@ -53,7 +49,7 @@ def require_role(*roles: str):
 
 def require_teacher_or_admin(user: User = Depends(get_current_user)):
     """
-    Шорткат для admin/teacher, чтобы не писать каждый раз require_role.
+    Шорткат: разрешаем только admin и teacher.
     """
     if user.role not in ("admin", "teacher"):
         raise HTTPException(status_code=403, detail="Forbidden")

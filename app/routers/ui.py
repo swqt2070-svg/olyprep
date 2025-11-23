@@ -18,7 +18,7 @@ import zipfile
 import re
 import json
 
-from app.deps import get_db, get_current_user, require_role
+from app.deps import get_db, get_current_user, require_role, require_teacher_or_admin
 from app.models import User, Question, Test, TestQuestion, Submission, Answer
 from app.security import hash_password, verify_password, create_token
 
