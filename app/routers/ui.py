@@ -16,6 +16,7 @@ import json
 import io
 import zipfile
 import re
+import json
 
 from app.deps import get_db, get_current_user, require_role
 from app.models import User, Question, Test, TestQuestion, Submission, Answer
@@ -741,30 +742,17 @@ async def questions_list(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    rows: List[Question] = db.query(Question).all()
-
-    # Категория -> Класс -> Год -> Этап -> [список задач]
-    library: dict[str, dict[int, dict[str, dict[str, List[Question]]]]] = {}
-
-    for q in rows:
-        cat = q.category or "Без категории"
-        grade = q.grade or 0
-        year = q.year or "—"
-        stage = q.stage or "—"
-
-        library.setdefault(cat, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
-
+    rows: List[Question] = db.query(Question).order_by(Question.id.desc()).all()
     return templates.TemplateResponse(
         "questions_list.html",
         {
             "request": request,
             "user": user,
-            "library": library,
+            "questions": rows,
             "error": None,
             "success": None,
         },
     )
-
 
 
 @router.get("/questions/new", response_class=HTMLResponse)
@@ -851,31 +839,35 @@ async def question_new_submit(
             "success": f"Задача успешно сохранена. ID: {q.id}",
         },
     )
-
-
 @router.get("/questions/{question_id}/edit", response_class=HTMLResponse)
-async def question_edit_page(
-    question_id: int,
+async def question_edit(
     request: Request,
+    question_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin", "teacher")),
+    user: User = Depends(require_teacher_or_admin),
 ):
     q = db.get(Question, question_id)
     if not q:
-        raise HTTPException(status_code=404, detail="question not found")
+        raise HTTPException(status_code=404, detail="Question not found")
 
-    options: List[str] = []
-    selected_correct: Optional[int] = None
-    correct_text = ""
+    # варианты и индекс правильного варианта
+    options = []
+    correct_index = None
 
-    if q.answer_type == "single":
-        options = json.loads(q.options) if q.options else []
+    if q.answer_type == "single" and q.options:
         try:
-            selected_correct = int(q.correct)
+            options = json.loads(q.options)
         except Exception:
-            selected_correct = None
-    else:
-        correct_text = q.correct or ""
+            options = []
+        if q.correct is not None:
+            try:
+                correct_index = int(str(q.correct))
+            except ValueError:
+                correct_index = None
+
+    # чтобы в форме всегда было минимум 4 строки под варианты
+    while len(options) < 4:
+        options.append("")
 
     return templates.TemplateResponse(
         "question_edit.html",
@@ -884,8 +876,7 @@ async def question_edit_page(
             "user": user,
             "question": q,
             "options": options,
-            "selected_correct": selected_correct,
-            "correct_text": correct_text,
+            "correct_index": correct_index,
             "error": None,
             "success": None,
         },
@@ -893,70 +884,100 @@ async def question_edit_page(
 
 
 @router.post("/questions/{question_id}/edit", response_class=HTMLResponse)
-async def question_edit_submit(
-    question_id: int,
+async def question_edit_post(
     request: Request,
-    text: str = Form(...),
-    answer_type: str = Form(...),
-    correct_text: str = Form(""),
-    correct_index: str = Form(""),
+    question_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin", "teacher")),
+    user: User = Depends(require_teacher_or_admin),
 ):
     q = db.get(Question, question_id)
     if not q:
-        raise HTTPException(status_code=404, detail="question not found")
+        raise HTTPException(status_code=404, detail="Question not found")
 
     form = await request.form()
-    error: Optional[str] = None
-    success: Optional[str] = None
-    raw_options: List[str] = []
+    text = (form.get("text") or "").strip()
+    answer_type = (form.get("answer_type") or "text").strip()
 
-    answer_type = answer_type.strip()
+    if not text:
+        # переотображаем форму с ошибкой
+        options = []
+        correct_index = None
+        if q.answer_type == "single" and q.options:
+            try:
+                options = json.loads(q.options)
+            except Exception:
+                options = []
+            if q.correct is not None:
+                try:
+                    correct_index = int(str(q.correct))
+                except ValueError:
+                    correct_index = None
+        while len(options) < 4:
+            options.append("")
+        return templates.TemplateResponse(
+            "question_edit.html",
+            {
+                "request": request,
+                "user": user,
+                "question": q,
+                "options": options,
+                "correct_index": correct_index,
+                "error": "Текст задачи не может быть пустым",
+                "success": None,
+            },
+        )
 
-    if answer_type not in ("text", "single"):
-        error = "Неверный тип ответа."
-    elif answer_type == "text":
-        if not correct_text.strip():
-            error = "Укажите правильный текстовый ответ."
-    elif answer_type == "single":
-        for idx in range(4):
-            val = form.get(f"option_{idx}", "").strip()
-            if val:
-                raw_options.append(val)
-        if not raw_options:
-            error = "Укажите хотя бы один вариант ответа."
-        elif correct_index == "":
-            error = "Выберите, какой вариант считать правильным."
+    q.text = text
+    q.answer_type = answer_type
 
-    if not error:
-        if answer_type == "text":
-            q.text = text
-            q.answer_type = "text"
-            q.options = None
-            q.correct = correct_text.strip()
-        else:
-            q.text = text
-            q.answer_type = "single"
-            q.options = json.dumps(raw_options, ensure_ascii=False)
-            q.correct = correct_index
-
-        db.add(q)
-        db.commit()
-        success = "Задача успешно обновлена."
-
-    options: List[str] = []
-    selected_correct: Optional[int] = None
-    correct_text_val = ""
-
-    if q.answer_type == "single":
-        options = json.loads(q.options) if q.options else []
-        try:
-            selected_correct = int(q.correct)
-        except Exception:
-            selected_correct = None
+    if answer_type == "text":
+        # просто текстовый ответ
+        q.correct = (form.get("correct_text") or "").strip()
+        q.options = None
     else:
-        correct_text_val = q.correct or ""
+        # собираем варианты
+        options = []
+        idx = 0
+        while True:
+            key = f"option_{idx}"
+            if key not in form:
+                break
+            value = (form.get(key) or "").strip()
+            options.append(value)
+            idx += 1
+
+        # убираем пустые варианты в конце
+        while options and not options[-1]:
+            options.pop()
+
+        q.options = json.dumps(options, ensure_ascii=False) if options else None
+
+        # индекс правильного варианта
+        correct_raw = form.get("correct_index")
+        if correct_raw is not None and correct_raw != "":
+            q.correct = str(correct_raw)
+        else:
+            q.correct = None
+
+    db.add(q)
+    db.commit()
+    db.refresh(q)
+
+    # готовим данные для повторного отображения формы
+    options = []
+    correct_index = None
+    if q.answer_type == "single" and q.options:
+        try:
+            options = json.loads(q.options)
+        except Exception:
+            options = []
+        if q.correct is not None:
+            try:
+                correct_index = int(str(q.correct))
+            except ValueError:
+                correct_index = None
+    while len(options) < 4:
+        options.append("")
 
     return templates.TemplateResponse(
         "question_edit.html",
@@ -965,12 +986,10 @@ async def question_edit_submit(
             "user": user,
             "question": q,
             "options": options,
-            "selected_correct": selected_correct,
-            "correct_text": correct_text_val,
-            "error": error,
-            "success": success,
+            "correct_index": correct_index,
+            "error": None,
+            "success": "Изменения сохранены",
         },
-        status_code=400 if error else 200,
     )
 
 
