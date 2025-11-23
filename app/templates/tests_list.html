@@ -1,58 +1,52 @@
 {% extends "base.html" %}
-{% block title %}Тесты — OlyPrep{% endblock %}
-{% block content %}
-<div class="page-header">
-    <div>
-        <div class="page-title">Тесты</div>
-        <div class="page-subtitle">
-            {% if user.role in ['admin','teacher'] %}
-                Управляйте тренировочными наборами задач и выдавайте их ученикам.
-            {% else %}
-                Выберите тест, чтобы пройти тренировку.
-            {% endif %}
-        </div>
-    </div>
-    <div class="page-actions">
-        {% if user.role in ['admin','teacher'] %}
-            <form method="post" action="/ui/tests/new" style="display:flex; gap:0.4rem;">
-                <input type="text" name="title" placeholder="Название нового теста" required>
-                <button type="submit" class="btn btn-primary">Создать</button>
-            </form>
-        {% endif %}
-    </div>
-</div>
 
-<section class="card table-card">
-    {% if tests|length == 0 %}
-        <p class="muted">Пока нет тестов. {% if user.role in ['admin','teacher'] %}Создайте первый в форме выше.{% endif %}</p>
-    {% else %}
-        <table>
-            <thead>
-                <tr>
-                    <th style="width:60px;">ID</th>
-                    <th>Название</th>
-                    <th style="width:160px;">Действия</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for t in tests %}
+{% block title %}Тесты{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <h1 class="page-title">Тесты</h1>
+
+    {% if role in ["teacher", "admin"] %}
+        <div class="actions-bar">
+            <a href="/ui/tests/new" class="btn btn-primary">Создать тест</a>
+        </div>
+    {% endif %}
+
+    {% if test_info %}
+        <div class="card">
+            <table class="table">
+                <thead>
                     <tr>
-                        <td>#{{ t.id }}</td>
+                        <th>Название</th>
+                        <th>Вопросов</th>
+                        <th>Макс. балл</th>
+                        <th>Создан</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for item in test_info %}
+                    {% set t = item.test %}
+                    <tr>
                         <td>{{ t.title }}</td>
-                        <td>
-                            <div style="display:flex; gap:0.4rem;">
-                                <a class="btn btn-ghost" href="/ui/tests/{{ t.id }}">Открыть</a>
-                                {% if user.role not in ['admin','teacher'] %}
-                                    <form method="post" action="/ui/tests/{{ t.id }}/start">
-                                        <button class="btn btn-primary" type="submit">Пройти</button>
-                                    </form>
-                                {% endif %}
-                            </div>
+                        <td>{{ item.question_count }}</td>
+                        <td>{{ item.max_score }}</td>
+                        <td>{{ t.created_at.strftime("%d.%m.%Y %H:%M") if t.created_at else "" }}</td>
+                        <td class="table-actions">
+                            {% if role in ["teacher", "admin"] %}
+                                <a href="/ui/tests/{{ t.id }}/edit" class="btn btn-sm">Редактировать</a>
+                            {% endif %}
+                            <a href="/ui/tests/{{ t.id }}/start" class="btn btn-sm btn-primary">
+                                Пройти
+                            </a>
                         </td>
                     </tr>
                 {% endfor %}
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>Тестов пока нет.</p>
     {% endif %}
-</section>
+</div>
 {% endblock %}

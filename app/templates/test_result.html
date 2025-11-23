@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Результаты теста{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <h1 class="page-title">Результаты теста «{{ test.title }}»</h1>
+
+    <div class="card">
+        <p><strong>Итоговый балл:</strong> {{ submission.total_score or 0 }} / {{ submission.max_score or 0 }}</p>
+        <p><strong>Завершено:</strong>
+            {{ submission.finished_at.strftime("%d.%m.%Y %H:%M") if submission.finished_at else "ещё не завершён" }}
+        </p>
+    </div>
+
+    {% if test.show_correct_answers %}
+        <div class="card">
+            <h2 class="section-title">Детализация по задачам</h2>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">#</th>
+                        <th>Задача</th>
+                        <th style="width: 220px;">Ваш ответ</th>
+                        <th style="width: 220px;">Правильный ответ</th>
+                        <th style="width: 80px;">Баллы</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for row in rows %}
+                    <tr class="{% if row.answer and row.answer.is_correct %}row-correct{% else %}row-wrong{% endif %}">
+                        <td>{{ loop.index }}</td>
+                        <td><pre class="question-text-small">{{ row.question.text }}</pre></td>
+                        <td>
+                            {% if row.answer %}
+                                {% if row.answer.answer_type == "text" %}
+                                    {{ row.answer.answer_text or "—" }}
+                                {% else %}
+                                    {{ row.answer.selected_option_ids or "—" }}
+                                {% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td>{{ row.correct_repr or "—" }}</td>
+                        <td>{{ row.answer.points if row.answer and row.answer.points is not none else 0 }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+
+    <div class="form-actions">
+        <a href="/ui/tests" class="btn btn-secondary">К списку тестов</a>
+    </div>
+</div>
+{% endblock %}

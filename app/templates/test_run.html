@@ -1,118 +1,115 @@
 {% extends "base.html" %}
-{% block title %}Тест {{ test.title }} — OlyPrep{% endblock %}
+
+{% block title %}Прохождение теста{% endblock %}
+
 {% block content %}
-<div class="page-header">
-    <div>
-        <div class="page-title">Тест: {{ test.title }}</div>
-        <div class="page-subtitle">
-            {% if user.role in ['admin','teacher'] %}
-                Конструктор теста: добавление задач и просмотр структуры.
-            {% else %}
-                Ответьте на все задачи и отправьте результаты для проверки.
-            {% endif %}
-        </div>
-    </div>
-    <div class="page-actions">
-        <a href="/ui/tests" class="btn btn-ghost">← К списку тестов</a>
-    </div>
-</div>
+<div class="page-container">
+    <h1 class="page-title">{{ test.title }}</h1>
 
-<div class="test-grid">
-    <section class="card">
-        <div class="card-header-inline">
-            <h2 style="font-size:1.05rem;">Список задач</h2>
-            <span class="badge">
-                {{ items|length }} задач{% if max_points is not none %}, максимум {{ max_points }} баллов{% endif %}
-            </span>
+    <div class="card">
+        <div class="test-header">
+            <div>Вопрос {{ order }} из {{ total_questions }}</div>
+            <div>Максимальный балл: {{ submission.max_score or 0 }}</div>
         </div>
 
-        {% if items|length == 0 %}
-            <p class="muted">В этот тест пока не добавлено ни одной задачи.</p>
-        {% else %}
-            <ol style="margin-left:1.1rem; margin-top:0.5rem;">
-                {% for item in items %}
-                    <li style="margin-bottom:0.7rem;">
-                        <div style="font-size:0.92rem; margin-bottom:0.2rem;">{{ item.q.text }}</div>
-                        <div class="muted">
-                            {% if item.q.answer_type == 'text' %}
-                                <span class="badge badge-blue">текстовый ответ</span>
-                            {% else %}
-                                <span class="badge badge-green">один вариант</span>
-                            {% endif %}
-                            · {{ item.tq.points }} балл(ов)
-                        </div>
-                    </li>
-                {% endfor %}
-            </ol>
-        {% endif %}
-    </section>
+        <form method="post">
+            <input type="hidden" name="question_id" value="{{ question.id }}">
+            <input type="hidden" name="answer_type" value="{{ question.answer_type }}">
 
-    <section class="card">
-        {% if user.role in ['admin','teacher'] %}
-            <h2 style="font-size:1.05rem;">Добавить задачу</h2>
-            <form method="post" action="/ui/tests/{{ test.id }}/add-question" class="form" style="margin-top:0.5rem;">
-                <div class="field">
-                    <label class="field-label">ID задачи</label>
-                    <input type="text" name="question_id" placeholder="Например: 1" required>
+            <div class="form-group">
+                <label class="label-bold">Текст задачи</label>
+                <div class="question-text-block">
+                    <pre class="question-text">{{ question.text }}</pre>
                 </div>
-                <div class="field">
-                    <label class="field-label">Баллы за задачу</label>
-                    <input type="text" name="points" value="1">
+            </div>
+
+            {# В зависимости от типа ответа #}
+            {% if question.answer_type in ["text"] %}
+                <div class="form-group">
+                    <label for="answer_text">Ответ</label>
+                    <textarea id="answer_text"
+                              name="answer_text"
+                              rows="4"
+                              class="input-textarea">{{ existing_answer.answer_text if existing_answer else "" }}</textarea>
                 </div>
-                <button type="submit" class="btn btn-primary">Добавить</button>
-            </form>
-            <p class="muted" style="margin-top:0.75rem;">
-                ID задач можно посмотреть в <a href="/ui/questions">библиотеке задач</a>.
-            </p>
-            <hr style="border:none; border-top:1px solid rgba(148,163,184,0.35); margin:1rem 0;">
-        {% endif %}
 
-        {% if user.role not in ['admin','teacher'] %}
-            {% if not submission %}
-                <h2 style="font-size:1.05rem;">Начать попытку</h2>
-                <p class="muted" style="margin-top:0.4rem;">После начала попытки вы сможете ввести ответы на все задачи и отправить их на проверку.</p>
-                <form method="post" action="/ui/tests/{{ test.id }}/start" style="margin-top:0.7rem;">
-                    <button type="submit" class="btn btn-primary">Начать тест</button>
-                </form>
-            {% else %}
-                <h2 style="font-size:1.05rem;">Ответы</h2>
-                {% if result %}
-                    <div class="result-box">
-                        <h3>Результат</h3>
-                        <p>Набрано {{ result.score }} из {{ result.max_points }} возможных баллов.</p>
-                    </div>
-                {% endif %}
-                <form method="post" action="/ui/tests/{{ test.id }}/submit" class="form" style="margin-top:0.75rem;">
-                    <input type="hidden" name="submission_id" value="{{ submission.id }}">
-
-                    <div class="answers-grid">
-                        {% for item in items %}
-                            <div class="field">
-                                <div class="field-label">Задача #{{ loop.index }}</div>
-                                <div class="muted" style="margin-bottom:0.2rem;">{{ item.q.text }}</div>
-                                <div class="answer-input">
-                                    {% if item.q.answer_type == 'text' %}
-                                        <input type="text" name="answer_{{ item.q.id }}" placeholder="Ваш ответ">
-                                    {% else %}
-                                        {% set opts = item.options or [] %}
-                                        {% for opt in opts %}
-                                            <label>
-                                                <input type="radio" name="answer_{{ item.q.id }}" value="{{ loop.index0 }}">
-                                                {{ opt }}
-                                            </label><br>
-                                        {% endfor %}
-                                    {% endif %}
-                                </div>
-                            </div>
+            {% elif question.answer_type in ["single", "one"] %}
+                <div class="form-group">
+                    <label class="label-bold">Выберите один вариант</label>
+                    {% set selected_id = existing_answer.selected_option_ids if existing_answer else "" %}
+                    <div class="options-list">
+                        {% for opt in options %}
+                            <label class="option-row">
+                                <input type="radio"
+                                       name="selected_option"
+                                       value="{{ opt.id }}"
+                                       {% if selected_id and (selected_id|string) == (opt.id|string) %}checked{% endif %}>
+                                <span>{{ opt.text }}</span>
+                            </label>
                         {% endfor %}
                     </div>
+                </div>
 
-                    <button type="submit" class="btn btn-primary" style="margin-top:0.9rem;">Отправить на проверку</button>
-                </form>
+            {% elif question.answer_type in ["multiple", "many"] %}
+                <div class="form-group">
+                    <label class="label-bold">Выберите один или несколько вариантов</label>
+                    {% set selected_ids = [] %}
+                    {% if existing_answer and existing_answer.selected_option_ids %}
+                        {% set selected_ids = existing_answer.selected_option_ids.split(",") %}
+                    {% endif %}
+                    <div class="options-list">
+                        {% for opt in options %}
+                            <label class="option-row">
+                                <input type="checkbox"
+                                       name="selected_options"
+                                       value="{{ opt.id }}"
+                                       {% if (opt.id|string) in selected_ids %}checked{% endif %}>
+                                <span>{{ opt.text }}</span>
+                            </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            {% else %}
+                <p>Этот тип задачи пока не поддерживается в новом режиме тестов.</p>
             {% endif %}
-        {% else %}
-            <p class="muted">Как учитель или администратор вы можете добавлять задачи в этот тест. Просмотр прохождения будет реализован позже.</p>
-        {% endif %}
-    </section>
+
+            <div class="test-navigation">
+                <div class="nav-left">
+                    {% if order > 1 %}
+                        <button type="submit" name="action" value="prev" class="btn btn-secondary">
+                            ← Предыдущий
+                        </button>
+                    {% endif %}
+                </div>
+
+                <div class="nav-center">
+                    {# Навигатор по номерам вопросов #}
+                    {% for idx in range(1, total_questions + 1) %}
+                        {% set is_current = (idx == order) %}
+                        {% set is_answered = (idx-1) < total_questions
+                                             and (options and False) %}
+                        <button type="submit"
+                                name="action"
+                                value="goto_{{ idx }}"
+                                class="btn btn-nav {% if is_current %}btn-nav-current{% endif %}">
+                            {{ idx }}
+                        </button>
+                    {% endfor %}
+                </div>
+
+                <div class="nav-right">
+                    {% if order < total_questions %}
+                        <button type="submit" name="action" value="next" class="btn btn-secondary">
+                            Следующий →
+                        </button>
+                    {% endif %}
+                    <button type="submit" name="action" value="finish" class="btn btn-primary">
+                        Завершить тест
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
 </div>
 {% endblock %}

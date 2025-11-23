@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if mode == "create" %}Новый тест{% else %}Редактирование теста{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <h1 class="page-title">
+        {% if mode == "create" %}Создание теста{% else %}Редактирование теста #{{ test.id }}{% endif %}
+    </h1>
+
+    <div class="card">
+        <form method="post">
+            <div class="form-group">
+                <label for="title">Название теста *</label>
+                <input type="text" id="title" name="title" class="input-text"
+                       value="{{ test.title if test else '' }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="description">Описание</label>
+                <textarea id="description" name="description" rows="3"
+                          class="input-textarea">{{ test.description if test else '' }}</textarea>
+            </div>
+
+            <div class="form-group form-group-inline">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="show_correct_answers"
+                           {% if test and test.show_correct_answers %}checked{% elif not test %}checked{% endif %}>
+                    Показывать правильные ответы после сдачи
+                </label>
+            </div>
+
+            <hr>
+
+            <h2 class="section-title">Выбор задач из библиотеки</h2>
+            <p class="section-hint">
+                Отметь задачи, которые войдут в тест, и задай количество баллов за каждую.
+            </p>
+
+            <div class="table-wrapper">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;">✓</th>
+                            <th style="width: 60px;">ID</th>
+                            <th>Текст задачи</th>
+                            <th style="width: 120px;">Баллы</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for q in questions %}
+                        {% set tq = selected.get(q.id) if selected else None %}
+                        <tr>
+                            <td class="text-center">
+                                <input type="checkbox"
+                                       name="q_{{ q.id }}_include"
+                                       {% if tq %}checked{% endif %}>
+                            </td>
+                            <td>{{ q.id }}</td>
+                            <td class="question-text-cell">
+                                {{ q.text | truncate(160, True, '…') }}
+                            </td>
+                            <td>
+                                <input type="number"
+                                       class="input-number"
+                                       name="q_{{ q.id }}_points"
+                                       min="0"
+                                       value="{{ tq.points if tq else 1 }}">
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                    {% if mode == "create" %}Создать тест{% else %}Сохранить изменения{% endif %}
+                </button>
+                <a href="/ui/tests" class="btn btn-secondary">К списку тестов</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
