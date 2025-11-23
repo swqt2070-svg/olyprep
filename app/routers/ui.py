@@ -1305,6 +1305,23 @@ async def test_view(
         max_points += tq.points
         items.append({"tq": tq, "q": q, "options": opts, "given": None, "earned": 0})
 
+    if not items:
+        raise HTTPException(status_code=400, detail="test has no questions")
+
+    # Render first question for the run page
+    current = items[0]
+    question = current["q"]
+    answers_list = []
+    if question.answer_type != "text":
+        # prefer structured options if present
+        if current["options"]:
+            answers_list = [
+                type("Opt", (), {"id": idx, "text": opt})
+                for idx, opt in enumerate(current["options"])
+            ]
+        elif hasattr(question, "answers") and question.answers:
+            answers_list = question.answers
+
     submission = None
     if submission_id is not None:
         submission = db.get(Submission, submission_id)
@@ -1314,15 +1331,23 @@ async def test_view(
     return templates.TemplateResponse(
         "test_run.html",
         {
-            "request": request,
-            "user": user,
-            "test": test,
-            "items": items,
-            "max_points": max_points,
-            "submission": submission,
-            "result": None,
-        },
-    )
+        "request": request,
+        "user": user,
+        "test": test,
+        "items": items,
+        "question": question,
+        "answers": answers_list,
+        "index": 0,
+        "total_questions": len(items),
+        "state_json": "",
+        "selected_answer_id": None,
+        "selected_answer_ids": [],
+        "answer_text": "",
+        "max_points": max_points,
+        "submission": submission,
+        "result": None,
+    },
+)
 
 
 @router.post("/tests/{test_id}/add-question")
