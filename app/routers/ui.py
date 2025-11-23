@@ -5,12 +5,17 @@ from fastapi import (
     Form,
     status,
     HTTPException,
+    UploadFile,
+    File,
 )
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
+import io
+import zipfile
+import re
 
 from app.deps import get_db, get_current_user, require_role
 from app.models import User, Question, Test, TestQuestion, Submission, Answer
@@ -19,7 +24,7 @@ from app.security import hash_password, verify_password, create_token
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
 
-# Коды приглашения — при желании замени
+# Коды приглашения
 STUDENT_INVITE_CODE = "STUDENT2025"
 TEACHER_INVITE_CODE = "TEACHER2025"
 
@@ -28,7 +33,7 @@ def redirect(url: str) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ---------- ВСПОМОГАТЕЛЬНОЕ: контекст для ЛК ----------
+# ---------- ВСПОМОГАТЕЛЬНОЕ: контекст ЛК ----------
 
 
 def build_account_context(
@@ -69,7 +74,7 @@ def build_account_context(
             )
         student_results = results
 
-    # Результаты учеников (teacher/admin — по всем тестам, пока без фильтров)
+    # Результаты учеников (видят teacher/admin)
     if user.role in ("teacher", "admin"):
         students: List[User] = db.query(User).filter(User.role == "student").all()
         students_map = {s.id: s for s in students}
@@ -87,20 +92,15 @@ def build_account_context(
 
         tests: List[Test] = db.query(Test).all()
         tests_map = {t.id: t for t in tests}
-        test_ids = [t.id for t in tests]
 
-        if test_ids:
-            tqs2: List[TestQuestion] = (
+        max_points_map: dict[int, int] = {}
+        for t in tests:
+            tqs = (
                 db.query(TestQuestion)
-                .filter(TestQuestion.test_id.in_(test_ids))
+                .filter(TestQuestion.test_id == t.id)
                 .all()
             )
-            max_points_map: dict[int, int] = {}
-            for tq in tqs2:
-                max_points_map.setdefault(tq.test_id, 0)
-                max_points_map[tq.test_id] += tq.points
-        else:
-            max_points_map = {}
+            max_points_map[t.id] = sum(tq.points for tq in tqs) if tqs else 0
 
         rows = []
         for sub in submissions2:
@@ -195,7 +195,7 @@ async def register_submit(
 
     has_admin = db.query(User).filter(User.role == "admin").first() is not None
 
-    # первый пользователь — admin без кода
+    # Первый пользователь — admin без кода
     if not has_admin:
         role = "admin"
     else:
@@ -367,7 +367,155 @@ async def admin_set_role(
     )
 
 
-# ---------- QUESTIONS UI (список / создание / редактирование / удаление) ----------
+# ---------- IMPORT UI (ZIP с .md) ----------
+
+
+def parse_markdown_to_question(raw: str) -> Optional[dict]:
+    """
+    Очень простой парсер:
+    ищет строку вида "Ответ: ..." или "Answer: ..." и считает всё выше — текстом задачи.
+    """
+    text = raw.strip()
+    if not text:
+        return None
+
+    lines = text.splitlines()
+    answer_idx = None
+    answer_value = None
+
+    for idx, line in enumerate(lines):
+        m = re.search(r"(Ответ|Answer)\s*[:\-]\s*(.+)", line, re.IGNORECASE)
+        if m:
+            answer_idx = idx
+            answer_value = m.group(2).strip()
+            break
+
+    if answer_idx is None or not answer_value:
+        # нет явной строки "Ответ:" — пропускаем файл
+        return None
+
+    question_text = "\n".join(lines[:answer_idx]).strip()
+    if not question_text:
+        question_text = text
+
+    return {
+        "text": question_text,
+        "answer_type": "text",
+        "correct": answer_value,
+        "options_json": None,
+    }
+
+
+@router.get("/import", response_class=HTMLResponse)
+async def import_page(
+    request: Request,
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    return templates.TemplateResponse(
+        "import.html",
+        {
+            "request": request,
+            "user": user,
+            "error": None,
+            "summary": None,
+        },
+    )
+
+
+@router.post("/import", response_class=HTMLResponse)
+async def import_submit(
+    request: Request,
+    archive: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    filename = archive.filename or ""
+    filename_lower = filename.lower()
+    error: Optional[str] = None
+
+    if not filename_lower.endswith(".zip"):
+        return templates.TemplateResponse(
+            "import.html",
+            {
+                "request": request,
+                "user": user,
+                "error": "Ожидается .zip‑архив с .md файлами из Obsidian.",
+                "summary": None,
+            },
+            status_code=400,
+        )
+
+    try:
+        data = await archive.read()
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except Exception:
+        return templates.TemplateResponse(
+            "import.html",
+            {
+                "request": request,
+                "user": user,
+                "error": "Не удалось прочитать архив. Проверь, что это корректный .zip.",
+                "summary": None,
+            },
+            status_code=400,
+        )
+
+    imported_count = 0
+    skipped_count = 0
+    created_questions: List[Question] = []
+
+    for name in zf.namelist():
+        # пропускаем папки и не-.md
+        if name.endswith("/") or not name.lower().endswith(".md"):
+            continue
+
+        try:
+            raw_bytes = zf.read(name)
+        except KeyError:
+            continue
+
+        try:
+            raw_text = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            raw_text = raw_bytes.decode("cp1251", errors="ignore")
+
+        parsed = parse_markdown_to_question(raw_text)
+        if not parsed:
+            skipped_count += 1
+            continue
+
+        q = Question(
+            text=parsed["text"],
+            answer_type=parsed["answer_type"],
+            options=parsed["options_json"],
+            correct=parsed["correct"],
+        )
+        db.add(q)
+        db.flush()  # чтобы получить q.id до commit
+        created_questions.append(q)
+        imported_count += 1
+
+    db.commit()
+
+    summary = {
+        "filename": filename,
+        "imported_count": imported_count,
+        "skipped_count": skipped_count,
+        "created_questions": created_questions,
+    }
+
+    return templates.TemplateResponse(
+        "import.html",
+        {
+            "request": request,
+            "user": user,
+            "error": None,
+            "summary": summary,
+        },
+    )
+
+
+# ---------- QUESTIONS UI (список, создание, редактирование, удаление) ----------
 
 
 @router.get("/questions", response_class=HTMLResponse)
@@ -396,7 +544,12 @@ async def question_new_page(
 ):
     return templates.TemplateResponse(
         "question_new.html",
-        {"request": request, "user": user, "error": None, "success": None},
+        {
+            "request": request,
+            "user": user,
+            "error": None,
+            "success": None,
+        },
     )
 
 
@@ -412,64 +565,41 @@ async def question_new_submit(
 ):
     form = await request.form()
     error: Optional[str] = None
+    raw_options: List[str] = []
 
-    answer_type = answer_type.strip()
-
-    if answer_type not in ("text", "single", "multi"):
+    if answer_type not in ("text", "single"):
         error = "Неверный тип ответа."
-
-    # TEXT
-    if not error and answer_type == "text":
+    elif answer_type == "text":
         if not correct_text.strip():
             error = "Укажите правильный текстовый ответ."
-
-    # SINGLE / MULTI — собираем варианты
-    raw_options: List[str] = []
-    if not error and answer_type in ("single", "multi"):
+    elif answer_type == "single":
         for idx in range(4):
             val = form.get(f"option_{idx}", "").strip()
             if val:
                 raw_options.append(val)
         if not raw_options:
             error = "Укажите хотя бы один вариант ответа."
-
-    # SINGLE — проверка индекса
-    if not error and answer_type == "single":
-        if correct_index == "":
+        elif correct_index == "":
             error = "Выберите, какой вариант считать правильным."
-
-    # MULTI — проверка набора правильных вариантов
-    correct_multi_indices: List[str] = []
-    if not error and answer_type == "multi":
-        correct_multi_indices = form.getlist("correct_multi")
-        correct_multi_indices = [x for x in correct_multi_indices if x != ""]
-        if not correct_multi_indices:
-            error = "Отметьте хотя бы один правильный вариант."
 
     if error:
         return templates.TemplateResponse(
             "question_new.html",
-            {"request": request, "user": user, "error": error, "success": None},
+            {
+                "request": request,
+                "user": user,
+                "error": error,
+                "success": None,
+            },
             status_code=400,
         )
 
-    # Сохраняем
     if answer_type == "text":
         options_json = None
         correct = correct_text.strip()
-    elif answer_type == "single":
+    else:
         options_json = json.dumps(raw_options, ensure_ascii=False)
-        correct = correct_index  # строка с индексом
-    else:  # multi
-        options_json = json.dumps(raw_options, ensure_ascii=False)
-        indices: List[int] = []
-        for x in correct_multi_indices:
-            try:
-                indices.append(int(x))
-            except ValueError:
-                continue
-        indices = sorted(set(indices))
-        correct = json.dumps(indices, ensure_ascii=False)
+        correct = correct_index
 
     q = Question(
         text=text,
@@ -502,21 +632,14 @@ async def question_edit_page(
     if not q:
         raise HTTPException(status_code=404, detail="question not found")
 
-    options = json.loads(q.options) if q.options else []
-    correct_text = ""
-    correct_index = ""
-    correct_multi_indices: List[int] = []
-
-    if q.answer_type == "text":
-        correct_text = q.correct or ""
-    elif q.answer_type == "single":
-        correct_index = q.correct or ""
-    elif q.answer_type == "multi":
+    options: List[str] = []
+    selected_correct: Optional[int] = None
+    if q.answer_type == "single":
+        options = json.loads(q.options) if q.options else []
         try:
-            arr = json.loads(q.correct or "[]")
-            correct_multi_indices = [int(x) for x in arr]
+            selected_correct = int(q.correct)
         except Exception:
-            correct_multi_indices = []
+            selected_correct = None
 
     return templates.TemplateResponse(
         "question_edit.html",
@@ -525,9 +648,7 @@ async def question_edit_page(
             "user": user,
             "question": q,
             "options": options,
-            "correct_text": correct_text,
-            "correct_index": correct_index,
-            "correct_multi_indices": correct_multi_indices,
+            "selected_correct": selected_correct,
             "error": None,
             "success": None,
         },
@@ -551,111 +672,48 @@ async def question_edit_submit(
 
     form = await request.form()
     error: Optional[str] = None
+    success: Optional[str] = None
+    raw_options: List[str] = []
 
-    answer_type = answer_type.strip()
-
-    if answer_type not in ("text", "single", "multi"):
+    if answer_type not in ("text", "single"):
         error = "Неверный тип ответа."
-
-    # TEXT
-    if not error and answer_type == "text":
+    elif answer_type == "text":
         if not correct_text.strip():
             error = "Укажите правильный текстовый ответ."
-
-    raw_options: List[str] = []
-    if not error and answer_type in ("single", "multi"):
+    elif answer_type == "single":
         for idx in range(4):
             val = form.get(f"option_{idx}", "").strip()
             if val:
                 raw_options.append(val)
         if not raw_options:
             error = "Укажите хотя бы один вариант ответа."
-
-    if not error and answer_type == "single":
-        if correct_index == "":
+        elif correct_index == "":
             error = "Выберите, какой вариант считать правильным."
 
-    correct_multi_indices: List[str] = []
-    if not error and answer_type == "multi":
-        correct_multi_indices = form.getlist("correct_multi")
-        correct_multi_indices = [x for x in correct_multi_indices if x != ""]
-        if not correct_multi_indices:
-            error = "Отметьте хотя бы один правильный вариант."
+    if not error:
+        if answer_type == "text":
+            q.text = text
+            q.answer_type = "text"
+            q.options = None
+            q.correct = correct_text.strip()
+        else:
+            q.text = text
+            q.answer_type = "single"
+            q.options = json.dumps(raw_options, ensure_ascii=False)
+            q.correct = correct_index
 
-    if error:
+        db.add(q)
+        db.commit()
+        success = "Задача успешно обновлена."
+
+    options: List[str] = []
+    selected_correct: Optional[int] = None
+    if q.answer_type == "single":
         options = json.loads(q.options) if q.options else []
-        existing_correct_text = ""
-        existing_correct_index = ""
-        existing_multi: List[int] = []
-
-        if q.answer_type == "text":
-            existing_correct_text = q.correct or ""
-        elif q.answer_type == "single":
-            existing_correct_index = q.correct or ""
-        elif q.answer_type == "multi":
-            try:
-                arr = json.loads(q.correct or "[]")
-                existing_multi = [int(x) for x in arr]
-            except Exception:
-                existing_multi = []
-
-        return templates.TemplateResponse(
-            "question_edit.html",
-            {
-                "request": request,
-                "user": user,
-                "question": q,
-                "options": options,
-                "correct_text": existing_correct_text,
-                "correct_index": existing_correct_index,
-                "correct_multi_indices": existing_multi,
-                "error": error,
-                "success": None,
-            },
-            status_code=400,
-        )
-
-    # Перезаписываем данные вопроса
-    if answer_type == "text":
-        options_json = None
-        correct = correct_text.strip()
-    elif answer_type == "single":
-        options_json = json.dumps(raw_options, ensure_ascii=False)
-        correct = correct_index
-    else:  # multi
-        options_json = json.dumps(raw_options, ensure_ascii=False)
-        indices: List[int] = []
-        for x in correct_multi_indices:
-            try:
-                indices.append(int(x))
-            except ValueError:
-                continue
-        indices = sorted(set(indices))
-        correct = json.dumps(indices, ensure_ascii=False)
-
-    q.text = text
-    q.answer_type = answer_type
-    q.options = options_json
-    q.correct = correct
-    db.add(q)
-    db.commit()
-
-    # Заново считаем вспомогательные поля для шаблона
-    options = json.loads(q.options) if q.options else []
-    correct_text_val = ""
-    correct_index_val = ""
-    correct_multi_val: List[int] = []
-
-    if q.answer_type == "text":
-        correct_text_val = q.correct or ""
-    elif q.answer_type == "single":
-        correct_index_val = q.correct or ""
-    elif q.answer_type == "multi":
         try:
-            arr = json.loads(q.correct or "[]")
-            correct_multi_val = [int(x) for x in arr]
+            selected_correct = int(q.correct)
         except Exception:
-            correct_multi_val = []
+            selected_correct = None
 
     return templates.TemplateResponse(
         "question_edit.html",
@@ -664,12 +722,11 @@ async def question_edit_submit(
             "user": user,
             "question": q,
             "options": options,
-            "correct_text": correct_text_val,
-            "correct_index": correct_index_val,
-            "correct_multi_indices": correct_multi_val,
-            "error": None,
-            "success": "Изменения сохранены.",
+            "selected_correct": selected_correct,
+            "error": error,
+            "success": success,
         },
+        status_code=400 if error else 200,
     )
 
 
@@ -680,32 +737,33 @@ async def question_delete(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "teacher")),
 ):
-    error: Optional[str] = None
-    success: Optional[str] = None
-
     q = db.get(Question, question_id)
     if not q:
-        error = f"Вопрос #{question_id} не найден."
-    else:
-        # Удаляем зависимые TestQuestion и Answer
-        db.query(Answer).filter(Answer.question_id == question_id).delete()
-        db.query(TestQuestion).filter(TestQuestion.question_id == question_id).delete()
-        db.delete(q)
-        db.commit()
-        success = f"Вопрос #{question_id} удалён (также убран из тестов и ответов)."
+        raise HTTPException(status_code=404, detail="question not found")
 
-    rows: List[Question] = db.query(Question).order_by(Question.id.desc()).all()
-    return templates.TemplateResponse(
-        "questions_list.html",
-        {
-            "request": request,
-            "user": user,
-            "questions": rows,
-            "error": error,
-            "success": success,
-        },
-        status_code=400 if error else 200,
+    usage_count = (
+        db.query(TestQuestion)
+        .filter(TestQuestion.question_id == question_id)
+        .count()
     )
+
+    if usage_count > 0:
+        rows: List[Question] = db.query(Question).order_by(Question.id.desc()).all()
+        return templates.TemplateResponse(
+            "questions_list.html",
+            {
+                "request": request,
+                "user": user,
+                "questions": rows,
+                "error": f"Нельзя удалить: вопрос используется в {usage_count} тест(ах).",
+                "success": None,
+            },
+            status_code=400,
+        )
+
+    db.delete(q)
+    db.commit()
+    return redirect("/ui/questions")
 
 
 # ---------- TESTS UI ----------
@@ -851,60 +909,33 @@ async def test_submit(
             continue
 
         field_name = f"answer_{q.id}"
+        given = form.get(field_name, "").strip()
         opts = json.loads(q.options) if q.options else None
         max_points += tq.points
 
-        correct_flag = 0
-        earned = 0
-        saved_given = ""
-
-        if q.answer_type == "multi":
-            selected = form.getlist(field_name)
-            selected = [s for s in selected if s != ""]
-            if selected:
-                try:
-                    selected_idx = sorted(int(x) for x in selected)
-                except ValueError:
-                    selected_idx = []
-                try:
-                    correct_indices = json.loads(q.correct or "[]")
-                except json.JSONDecodeError:
-                    correct_indices = []
-                except TypeError:
-                    correct_indices = []
-                correct_indices = (
-                    sorted(int(x) for x in correct_indices)
-                    if correct_indices
-                    else []
-                )
-                if selected_idx and selected_idx == correct_indices:
-                    correct_flag = 1
-                    earned = tq.points
-                saved_given = json.dumps(selected_idx, ensure_ascii=False)
+        if not given:
+            correct_flag = 0
+            earned = 0
         else:
-            given = form.get(field_name, "").strip()
-            saved_given = given
-
-            if given:
-                if q.answer_type == "text":
-                    gt = (q.correct or "").strip().lower()
-                    uv = given.strip().lower()
-                    ok = gt == uv
-                    correct_flag = 1 if ok else 0
-                    earned = tq.points if ok else 0
-                elif q.answer_type == "single":
-                    ok = (q.correct == given)
-                    correct_flag = 1 if ok else 0
-                    earned = tq.points if ok else 0
-                else:
-                    correct_flag = 0
-                    earned = 0
+            if q.answer_type == "text":
+                gt = (q.correct or "").strip().lower()
+                uv = given.strip().lower()
+                ok = gt == uv
+                correct_flag = 1 if ok else 0
+                earned = tq.points if ok else 0
+            elif q.answer_type == "single":
+                ok = q.correct == given
+                correct_flag = 1 if ok else 0
+                earned = tq.points if ok else 0
+            else:
+                correct_flag = 0
+                earned = 0
 
         ans = Answer(
             submission_id=submission.id,
             question_id=q.id,
-            given=saved_given,
-            correct=correct_flag,
+            given=given,
+            correct=bool(correct_flag),
             points=earned,
         )
         db.add(ans)
