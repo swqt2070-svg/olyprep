@@ -21,6 +21,7 @@ from app.models import (
     Test,
     Question,
     Answer,
+    TestQuestion,
     TestAttempt,
     TestAttemptAnswer,
 )
