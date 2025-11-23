@@ -3,213 +3,94 @@
 {% block title %}Результаты теста{% endblock %}
 
 {% block content %}
+<div class="page-inner page-test-result">
+    <h1 class="page-title">Результаты теста «{{ test.title }}»</h1>
 
-<style>
-    .test-result-layout {
-        max-width: 1100px;
-        margin: 32px auto 64px;
-    }
-
-    .test-result-card {
-        background: rgba(7, 19, 40, 0.9);
-        border-radius: 16px;
-        padding: 22px 26px 26px;
-        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
-        border: 1px solid rgba(255, 255, 255, 0.04);
-    }
-
-    .test-result-header h1 {
-        margin: 0 0 6px;
-        font-size: 22px;
-    }
-
-    .test-result-meta {
-        font-size: 14px;
-        color: rgba(255, 255, 255, 0.7);
-    }
-
-    .test-result-meta span {
-        display: inline-block;
-        margin-right: 18px;
-    }
-
-    .results-table-wrapper {
-        margin-top: 20px;
-        border-radius: 14px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        background: rgba(9, 22, 48, 0.85);
-        overflow-x: auto;
-    }
-
-    .results-table {
-        width: 100%;
-        min-width: 820px;
-        border-collapse: collapse;
-        font-size: 14px;
-    }
-
-    .results-table thead {
-        background: rgba(15, 34, 70, 0.95);
-    }
-
-    .results-table th,
-    .results-table td {
-        padding: 10px 12px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        vertical-align: top;
-    }
-
-    .results-table th {
-        text-align: left;
-        font-weight: 600;
-        color: rgba(255, 255, 255, 0.75);
-        white-space: nowrap;
-    }
-
-    .results-table tbody tr:nth-child(odd) {
-        background: rgba(255, 255, 255, 0.01);
-    }
-
-    .results-table tbody tr:last-child td {
-        border-bottom: none;
-    }
-
-    .col-idx {
-        width: 40px;
-        text-align: right;
-        color: rgba(255, 255, 255, 0.7);
-    }
-
-    .col-points {
-        width: 70px;
-        text-align: right;
-        white-space: nowrap;
-    }
-
-    .col-your,
-    .col-correct {
-        width: 180px;
-        white-space: pre-wrap;
-    }
-
-    .question-text-small {
-        font-size: 13px;
-        color: rgba(255, 255, 255, 0.82);
-    }
-
-    .answer-empty {
-        opacity: 0.55;
-        font-style: italic;
-    }
-
-    @media (max-width: 768px) {
-        .test-result-card {
-            padding: 18px 14px 22px;
-        }
-    }
-</style>
-
-<div class="test-result-layout">
-    <div class="test-result-card">
-        <div class="test-result-header">
-            <h1>Результаты теста «{{ test.title if test is defined else attempt.title if attempt is defined else 'Проверка темы' }}»</h1>
-            <div class="test-result-meta">
-                <span>Итоговый балл:
-                    {{ attempt.total_score if attempt is defined and attempt.total_score is not none
-                       else total_score if total_score is defined
-                       else 0 }}
-                    /
-                    {{ attempt.max_score if attempt is defined and attempt.max_score is not none
-                       else max_score if max_score is defined
-                       else 0 }}
-                </span>
-                {% if attempt is defined and attempt.finished_at is not none %}
-                    <span>Завершено: {{ attempt.finished_at }}</span>
-                {% elif finished_at is defined %}
-                    <span>Завершено: {{ finished_at }}</span>
-                {% endif %}
+    <div class="card card-test-result-summary">
+        <div class="result-main">
+            <div class="result-score">
+                Итоговый балл: <strong>{{ total_score }} / {{ max_total }}</strong>
             </div>
         </div>
+    </div>
 
-        {% set rows =
-            details if details is defined
-            else result_rows if result_rows is defined
-            else rows if rows is defined
-            else [] %}
+    <div class="card card-test-result-details">
+        <h2 class="card-title">Детализация по задачам</h2>
 
-        <div class="results-table-wrapper">
-            <table class="results-table">
+        <div class="table-wrapper">
+            <table class="result-table">
                 <thead>
                     <tr>
-                        <th class="col-idx">#</th>
+                        <th>#</th>
                         <th>Задача</th>
-                        <th class="col-your">Ваш ответ</th>
-                        <th class="col-correct">Правильный ответ</th>
-                        <th class="col-points">Баллы</th>
+                        <th>Ваш ответ</th>
+                        <th>Правильный ответ</th>
+                        <th>Баллы</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% if rows %}
-                        {% for row in rows %}
-                            {% set q = row.question if row.question is defined else None %}
-                            {% set q_text = row.question_text
-                                if row.question_text is defined
-                                else (q.text if q is not none and q.text is defined else q) %}
-
-                            {% set your = row.your_answer_text
-                                if row.your_answer_text is defined
-                                else row.user_answer_text
-                                if row.user_answer_text is defined
-                                else row.user_answer
-                                if row.user_answer is defined
-                                else None %}
-
-                            {% set correct = row.correct_answer_text
-                                if row.correct_answer_text is defined
-                                else row.correct_answer
-                                if row.correct_answer is defined
-                                else None %}
-
-                            {% set pts = row.points
-                                if row.points is defined
-                                else row.score
-                                if row.score is defined
-                                else 0 %}
-                            <tr>
-                                <td class="col-idx">{{ loop.index }}</td>
-                                <td>
-                                    <div class="question-text-small">
-                                        {{ q_text }}
-                                    </div>
-                                </td>
-                                <td class="col-your">
-                                    {% if your %}
-                                        {{ your }}
-                                    {% else %}
-                                        <span class="answer-empty">—</span>
-                                    {% endif %}
-                                </td>
-                                <td class="col-correct">
-                                    {% if correct %}
-                                        {{ correct }}
-                                    {% else %}
-                                        <span class="answer-empty">—</span>
-                                    {% endif %}
-                                </td>
-                                <td class="col-points">{{ pts }}</td>
-                            </tr>
-                        {% endfor %}
-                    {% else %}
+                    {% for row in rows %}
                         <tr>
-                            <td colspan="5" class="answer-empty" style="padding: 14px 12px;">
-                                Нет данных по задачам.
+                            <td>{{ row.index }}</td>
+                            <td class="col-question">
+                                {{ row.question.text | replace('\n', '<br>') | safe }}
                             </td>
+                            <td class="col-answer">{{ row.your_answer }}</td>
+                            <td class="col-answer">{{ row.correct_answer }}</td>
+                            <td>{{ row.score }} / {{ row.max_points }}</td>
                         </tr>
-                    {% endif %}
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_styles %}
+<style>
+    .page-test-result .card-test-result-summary,
+    .page-test-result .card-test-result-details {
+        max-width: 1200px;
+        margin: 0 auto 24px auto;
+        padding: 20px 24px;
+    }
+
+    .page-test-result .result-score {
+        font-size: 18px;
+    }
+
+    .page-test-result .table-wrapper {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .page-test-result .result-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    .page-test-result .result-table th,
+    .page-test-result .result-table td {
+        padding: 8px 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        vertical-align: top;
+    }
+
+    .page-test-result .result-table th {
+        text-align: left;
+        font-weight: 500;
+        color: #aeb4c5;
+        white-space: nowrap;
+    }
+
+    .page-test-result .col-question {
+        min-width: 260px;
+    }
+
+    .page-test-result .col-answer {
+        min-width: 160px;
+    }
+</style>
 {% endblock %}

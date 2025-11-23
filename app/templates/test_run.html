@@ -3,129 +3,261 @@
 {% block title %}Прохождение теста{% endblock %}
 
 {% block content %}
-<div class="page-inner">
-  <div class="page-header">
-    <div class="page-header__title">Проверка темы</div>
-    <div class="page-header__subtitle">
-      {{ test.title if test is defined else "Без названия" }}
-    </div>
-  </div>
+<div class="page-inner page-test-run">
+    <h1 class="page-title">Проверка темы</h1>
 
-  {% set q = question %}
-  {% set total = total_questions|default(1) %}
-  {% set current_num = question_number|default(1) %}
+    <div class="card card-test-run">
+        <form method="post">
+            <input type="hidden" name="state" value="{{ state_json }}">
+            <input type="hidden" name="index" value="{{ index }}">
+            <input type="hidden" name="question_id" value="{{ question.id }}">
 
-  <div class="card card--wide test-run">
-    <div class="test-run__header">
-      <div class="test-run__question-counter">
-        Вопрос {{ current_num }} из {{ total }}
-      </div>
-      {% if q and q.max_score is defined %}
-        <div class="test-run__max-score">
-          Максимальный балл: {{ q.max_score }}
-        </div>
-      {% endif %}
-    </div>
-
-    {# ТЕКСТ ЗАДАЧИ #}
-    <div class="test-run__block">
-      <div class="test-run__block-title">Текст задачи</div>
-      <div class="test-run__question-text">
-        {% if q and q.text %}
-          {{ q.text | replace('\n', '<br>') | safe }}
-        {% else %}
-          <em>Текст задачи не задан</em>
-        {% endif %}
-      </div>
-    </div>
-
-    <form method="post" action="">
-      {# FastAPI нужен request в форме CSRF не используем #}
-      <input type="hidden" name="question_id" value="{{ q.id if q else '' }}">
-      <input type="hidden" name="question_number" value="{{ current_num }}">
-
-      {# ОПРЕДЕЛЯЕМ, ЕСТЬ ЛИ ВАРИАНТЫ #}
-      {% if q and q.answers is defined %}
-        {% set non_empty_answers = q.answers | selectattr("text") | list %}
-      {% else %}
-        {% set non_empty_answers = [] %}
-      {% endif %}
-
-      {% if non_empty_answers|length > 0 %}
-        {# ВОПРОС С ВЫБОРОМ ОДНОГО ВАРИАНТА #}
-        <div class="test-run__block">
-          <div class="test-run__block-title">Выберите один вариант</div>
-
-          <div class="test-run__answers">
-            {% for a in non_empty_answers %}
-              <label class="answer-option">
-                <input
-                  type="radio"
-                  name="answer_id"
-                  value="{{ a.id }}"
-                  {% if saved_answer is not none and (saved_answer == a.id or saved_answer == a.text) %}checked{% endif %}
-                >
-                <span class="answer-option__text">{{ a.text }}</span>
-              </label>
-            {% endfor %}
-          </div>
-        </div>
-      {% else %}
-        {# ВОПРОС С ВВОДОМ ТЕКСТА #}
-        <div class="test-run__block">
-          <div class="test-run__block-title">Введите ответ</div>
-          <textarea
-            name="answer_text"
-            class="test-run__textarea"
-            rows="4"
-          >{{ saved_answer or "" }}</textarea>
-        </div>
-      {% endif %}
-
-      {# НАВИГАЦИЯ ПО ВОПРОСАМ #}
-      <div class="test-run__footer">
-        <div class="test-run__nav-left">
-          <button
-            type="submit"
-            name="action"
-            value="prev"
-            class="btn btn--secondary"
-            {% if current_num <= 1 %}disabled{% endif %}
-          >
-            ← Предыдущий
-          </button>
-        </div>
-
-        <div class="test-run__nav-center">
-          {% if total > 1 %}
-            <div class="test-run__question-dots">
-              {% for i in range(1, total + 1) %}
-                <button
-                  type="submit"
-                  name="goto"
-                  value="{{ i }}"
-                  class="question-dot {% if i == current_num %}question-dot--active{% endif %}"
-                >
-                  {{ i }}
-                </button>
-              {% endfor %}
+            <div class="test-run-header">
+                <div class="test-run-header-left">
+                    <div class="test-run-caption">
+                        Вопрос {{ index + 1 }} из {{ total_questions }}
+                    </div>
+                    <div class="test-run-caption">
+                        Максимальный балл: {{ max_points }}
+                    </div>
+                </div>
+                <div class="test-run-header-right">
+                    <div class="test-run-test-title">
+                        {{ test.title }}
+                    </div>
+                </div>
             </div>
-          {% endif %}
-        </div>
 
-        <div class="test-run__nav-right">
-          {% set last = is_last|default(current_num >= total) %}
-          <button
-            type="submit"
-            name="action"
-            value="{{ 'finish' if last else 'next' }}"
-            class="btn btn--primary"
-          >
-            {{ "Завершить тест" if last else "Следующий →" }}
-          </button>
-        </div>
-      </div>
-    </form>
-  </div>
+            <div class="test-run-body">
+                <div class="field">
+                    <label class="field-label">Текст задачи</label>
+                    <div class="question-text">
+                        {{ question.text | replace('\n', '<br>') | safe }}
+                    </div>
+                </div>
+
+                {% set answer_type = question.answer_type | default('text') %}
+                {% set is_multiple = (answer_type == 'multiple') %}
+                {% if answers|length > 0 and answer_type != 'text' %}
+                    <div class="field">
+                        <label class="field-label">
+                            {% if is_multiple %}
+                                Выберите один или несколько вариантов
+                            {% else %}
+                                Выберите один вариант
+                            {% endif %}
+                        </label>
+
+                        <div class="answers-list">
+                            {% set selected_ids = selected_answer_ids | default([]) %}
+                            {% set selected_id = selected_answer_id | default(None) %}
+
+                            {% for opt in answers %}
+                                <label class="answer-option">
+                                    <input
+                                        type="{{ 'checkbox' if is_multiple else 'radio' }}"
+                                        name="{{ 'selected_answer_ids' if is_multiple else 'selected_answer_id' }}"
+                                        value="{{ opt.id }}"
+                                        {% if (not is_multiple and selected_id == opt.id)
+                                              or (is_multiple and opt.id in selected_ids) %}
+                                            checked
+                                        {% endif %}
+                                    >
+                                    <span class="answer-option-text">{{ opt.text }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="field">
+                        <label class="field-label" for="answer_text">Напишите ответ</label>
+                        <textarea id="answer_text"
+                                  name="answer_text"
+                                  rows="5"
+                                  class="field-textarea">{{ answer_text | default('') }}</textarea>
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="test-run-footer">
+                <div class="test-run-nav">
+                    <button type="submit"
+                            class="btn btn-secondary"
+                            name="action"
+                            value="prev"
+                            {% if index <= 0 %}disabled{% endif %}>
+                        ← Предыдущий
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-secondary"
+                            name="action"
+                            value="next"
+                            {% if index >= total_questions - 1 %}disabled{% endif %}>
+                        Следующий →
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-primary"
+                            name="action"
+                            value="finish">
+                        Завершить тест
+                    </button>
+                </div>
+
+                <div class="test-run-question-nav">
+                    {% for i in range(total_questions) %}
+                        <button type="submit"
+                                class="btn btn-ghost {% if i == index %}btn-ghost-active{% endif %}"
+                                name="action"
+                                value="goto:{{ i }}">
+                            {{ i + 1 }}
+                        </button>
+                    {% endfor %}
+                </div>
+            </div>
+        </form>
+    </div>
 </div>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .page-test-run .card-test-run {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 24px 32px;
+    }
+
+    .page-test-run .test-run-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .page-test-run .test-run-caption {
+        font-size: 14px;
+        color: #aeb4c5;
+        margin-bottom: 4px;
+    }
+
+    .page-test-run .test-run-test-title {
+        font-size: 16px;
+        font-weight: 500;
+        text-align: right;
+    }
+
+    .page-test-run .field {
+        margin-bottom: 20px;
+    }
+
+    .page-test-run .field-label {
+        display: block;
+        font-size: 14px;
+        margin-bottom: 6px;
+        color: #aeb4c5;
+    }
+
+    .page-test-run .question-text {
+        padding: 12px 14px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        font-size: 15px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+    }
+
+    .page-test-run .field-textarea {
+        width: 100%;
+        min-height: 140px;
+        resize: vertical;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(7, 11, 25, 0.9);
+        padding: 10px 12px;
+        color: #ffffff;
+        font-size: 14px;
+        line-height: 1.45;
+    }
+
+    .page-test-run .field-textarea:focus {
+        outline: none;
+        border-color: #7c6bff;
+        box-shadow: 0 0 0 1px rgba(124, 107, 255, 0.5);
+    }
+
+    .page-test-run .answers-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 6px;
+    }
+
+    .page-test-run .answer-option {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.02);
+        border: 1px solid transparent;
+    }
+
+    .page-test-run .answer-option input {
+        margin-top: 3px;
+    }
+
+    .page-test-run .answer-option-text {
+        font-size: 14px;
+        line-height: 1.4;
+    }
+
+    .page-test-run .answer-option:hover {
+        border-color: rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.03);
+    }
+
+    .page-test-run .test-run-footer {
+        margin-top: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .page-test-run .test-run-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .page-test-run .test-run-question-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .page-test-run .btn-ghost-active {
+        border-color: rgba(255,255,255,0.7);
+        background: rgba(255,255,255,0.08);
+    }
+
+    @media (max-width: 768px) {
+        .page-test-run .card-test-run {
+            padding: 20px 16px;
+        }
+
+        .page-test-run .test-run-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .page-test-run .test-run-test-title {
+            text-align: left;
+        }
+    }
+</style>
 {% endblock %}
