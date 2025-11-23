@@ -246,6 +246,9 @@ async def run_test_get(
     answers_map = _load_attempt_answers_map(db, attempt)
 
     question = questions[position - 1]
+    if hasattr(question, "question") and not hasattr(question, "options"):
+        if question.question is not None:
+            question = question.question
     taa = answers_map.get(question.id)
     selected_answer_id, text_answer = _extract_answer_values(taa)
 
@@ -322,6 +325,9 @@ async def run_test_post(
 
     attempt = _get_or_create_attempt(db, test, user.id)
     question = questions[position - 1]
+    if hasattr(question, "question") and not hasattr(question, "options"):
+        if question.question is not None:
+            question = question.question
 
     # 1. Сохраняем ответ
     _save_answer_to_db(
