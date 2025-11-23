@@ -1,71 +1,97 @@
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Dict, Any
+# app/security.py
+import datetime as dt
+from typing import Any, Dict, Optional
 
 import jwt
-from passlib.context import CryptContext
+from fastapi import HTTPException, status
+from passlib.hash import bcrypt
 
-# Можно потом вынести в .env, пока оставим тут
-JWT_SECRET_KEY = "super-secret-key-change-me"  # ОБЯЗАТЕЛЬНО поменяй в будущем
-JWT_ALGORITHM = "HS256"
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 день
+from app.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# ------------------------
+# Хэширование паролей
+# ------------------------
+def _truncate_password(password: str) -> str:
+    """
+    Passlib (bcrypt) не принимает пароль > 72 байт.
+    Самый простой способ — обрезать строку до 72 символов.
+    """
+    if password is None:
+        return ""
+    if len(password) > 72:
+        return password[:72]
+    return password
 
 
 def hash_password(password: str) -> str:
     """
-    Хеширование пароля перед сохранением в БД.
+    Вернёт хэш пароля для хранения в БД.
     """
-    return pwd_context.hash(password)
+    pwd = _truncate_password(password)
+    return bcrypt.hash(pwd)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+def verify_password(password: str, password_hash: str) -> bool:
     """
-    Проверка введённого пароля против хеша из БД.
+    Проверка пароля при логине.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    pwd = _truncate_password(password)
+    try:
+        return bcrypt.verify(pwd, password_hash)
+    except ValueError:
+        # Если хэш битый / несовместим — просто не пускаем
+        return False
 
 
-def create_access_token(
+# ------------------------
+# JWT токены
+# ------------------------
+def create_token(
     data: Dict[str, Any],
-    expires_delta: Optional[timedelta] = None,
+    expires_delta: Optional[dt.timedelta] = None,
 ) -> str:
     """
-    Создаёт JWT‑токен c полем `exp` (время истечения) и `iat` (время выдачи).
-    В payload можно класть, например: {"id": user.id, "role": user.role, "email": user.email}
+    Создание access-токена (JWT).
+    В payload ОБЯЗАТЕЛЬНО передаём хотя бы id пользователя, email и role.
     """
     to_encode = data.copy()
 
-    now = datetime.now(timezone.utc)
     if expires_delta is None:
-        expires_delta = timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-    expire = now + expires_delta
+        expires_delta = dt.timedelta(
+            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+        )
 
-    to_encode.update({"exp": expire, "iat": now})
+    expire = dt.datetime.utcnow() + expires_delta
+    to_encode["exp"] = expire
 
     encoded_jwt = jwt.encode(
         to_encode,
-        JWT_SECRET_KEY,
-        algorithm=JWT_ALGORITHM,
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM,
     )
     return encoded_jwt
 
 
-def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
+def verify_token(token: str) -> Dict[str, Any]:
     """
-    Декодирование и валидация JWT‑токена.
-    Возвращает payload (dict) или None, если токен битый / протух.
+    Декодирование токена. Возвращает payload, если всё ок.
+    Бросает HTTPException(401), если токен просрочен или битый.
     """
     try:
         payload = jwt.decode(
             token,
-            JWT_SECRET_KEY,
-            algorithms=[JWT_ALGORITHM],
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
         )
         return payload
     except jwt.ExpiredSignatureError:
-        # Токен истёк
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Токен истёк. Войдите заново.",
+        )
     except jwt.InvalidTokenError:
-        # Любая другая ошибка валидации токена
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Невалидный токен.",
+        )
