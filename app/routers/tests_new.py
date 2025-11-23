@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from types import SimpleNamespace
 
 from app.deps import get_db, get_current_user
 from app.models import (
@@ -250,7 +251,15 @@ async def run_test_get(
 
     # варианты ответа — только с непустым текстом
     options: List[Answer] = []
-    if hasattr(question, "answers") and question.answers:
+    if question.options:
+        try:
+            raw_opts = json.loads(question.options)
+            for idx, text in enumerate(raw_opts):
+                if text and str(text).strip():
+                    options.append(SimpleNamespace(id=idx, text=text))
+        except Exception:
+            options = []
+    if not options and hasattr(question, "answers") and question.answers:
         for opt in question.answers:
             text = getattr(opt, "text", None)
             if text and str(text).strip():
