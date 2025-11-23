@@ -749,13 +749,15 @@ async def questions_list(
     library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
 
     for q in rows:
-        category = q.category or "Без категории"
-        grade = q.grade or 0
-        year = q.year or "—"
-        stage = q.stage or "—"
+        category = q.category or "??? ?????????"
+        try:
+            grade = int(q.grade) if q.grade is not None else 0
+        except (TypeError, ValueError):
+            grade = 0
+        year = q.year or "?"
+        stage = q.stage or "?"
 
         library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
-
     return templates.TemplateResponse(
         "questions_list.html",
         {
