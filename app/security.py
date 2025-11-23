@@ -11,9 +11,9 @@ from app.config import settings
 # Настройки JWT
 # =========================
 
-JWT_SECRET_KEY: str = settings.jwt_secret_key
-JWT_ALGORITHM: str = settings.jwt_algorithm
-ACCESS_TOKEN_EXPIRE_MINUTES: int = settings.access_token_expire_minutes
+JWT_SECRET_KEY: str = settings.JWT_SECRET_KEY
+JWT_ALGORITHM: str = settings.JWT_ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES: int = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 # =========================

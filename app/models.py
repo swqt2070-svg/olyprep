@@ -12,7 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import relationship, Mapped
+from sqlalchemy.orm import relationship, Mapped, synonym
 
 from .database import Base
 
@@ -91,6 +91,11 @@ class Question(Base):
         back_populates="question",
         cascade="all,delete-orphan",
     )
+
+    @property
+    def answers(self) -> List["AnswerOption"]:
+        """Alias for options to satisfy legacy code paths."""
+        return self.options
 
 
 class AnswerOption(Base):
@@ -175,54 +180,64 @@ class TestAttempt(Base):
     test_id: Mapped[int] = Column(
         Integer, ForeignKey("tests.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    student_id: Mapped[int] = Column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    user_id: Mapped[int] = Column(
+        "student_id",
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
+    student_id = synonym("user_id")
 
     started_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
     finished_at: Mapped[Optional[datetime]] = Column(DateTime, nullable=True)
 
-    score: Mapped[Optional[int]] = Column(Integer, nullable=True)
+    score: Mapped[Optional[int]] = Column(Integer, nullable=True, default=0)
     max_score: Mapped[Optional[int]] = Column(Integer, nullable=True)
 
     test: Mapped[Test] = relationship("Test", back_populates="attempts")
-    student: Mapped[User] = relationship("User", back_populates="attempts")
+    user: Mapped[User] = relationship("User", back_populates="attempts")
 
-    answers: Mapped[List["StudentAnswer"]] = relationship(
-        "StudentAnswer",
-        back_populates="attempt",
+    answers: Mapped[List["Answer"]] = relationship(
+        "Answer",
+        back_populates="submission",
         cascade="all,delete-orphan",
     )
 
 
-class StudentAnswer(Base):
+class Answer(Base):
     __tablename__ = "student_answers"
 
     id: Mapped[int] = Column(Integer, primary_key=True, index=True)
 
-    attempt_id: Mapped[int] = Column(
-        Integer, ForeignKey("test_attempts.id", ondelete="CASCADE"), nullable=False, index=True
+    submission_id: Mapped[int] = Column(
+        "attempt_id",
+        Integer,
+        ForeignKey("test_attempts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
+    attempt_id = synonym("submission_id")
     question_id: Mapped[int] = Column(
         Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    # Для одиночного выбора – id варианта
-    selected_option_id: Mapped[Optional[int]] = Column(
+    selected_answer_id: Mapped[Optional[int]] = Column(
+        "selected_option_id",
         Integer,
         ForeignKey("answer_options.id", ondelete="SET NULL"),
         nullable=True,
     )
-
-    # Для множественного выбора – запишем id через запятую, типа "3,5,7"
-    selected_option_ids: Mapped[Optional[str]] = Column(String, nullable=True)
-
-    # Для текстового ответа
     answer_text: Mapped[Optional[str]] = Column(Text, nullable=True)
+    given = synonym("answer_text")
+    value = synonym("answer_text")
 
-    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
+    correct: bool = Column(Boolean, default=False, nullable=False)
+    points: int = Column(Integer, default=0, nullable=False)
 
-    attempt: Mapped[TestAttempt] = relationship("TestAttempt", back_populates="answers")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    submission: Mapped[TestAttempt] = relationship("TestAttempt", back_populates="answers")
     question: Mapped[Question] = relationship("Question")
     selected_option: Mapped[Optional[AnswerOption]] = relationship("AnswerOption")
 
@@ -235,5 +250,5 @@ class StudentAnswer(Base):
     )
 
 
-# старый алиас, если где‑то в коде ещё используют Submission
 Submission = TestAttempt
+TestAttemptAnswer = Answer

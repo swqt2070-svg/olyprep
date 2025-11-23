@@ -1,0 +1,295 @@
+[33mcommit 52f6c76d3b30511b85a8f1fa417c819aa0698978[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 20:39:37 2025 +0300
+
+    so fucking fix bugs
+
+[33mcommit dba1195f8014ca14361d75746ce222f12c7f4dba[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 20:31:41 2025 +0300
+
+    Remove unused config
+
+[33mcommit 38199449b0065ee7413349542290611f402a7920[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 20:29:02 2025 +0300
+
+    Fix security: remove config dependency
+
+[33mcommit e29c9b78ca903e5278d904a75dd1cc2919177041[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 20:21:43 2025 +0300
+
+    Fix
+
+[33mcommit 1280185b77da14d21128e6efd5b1947ddc04852b[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 20:16:51 2025 +0300
+
+    Fix
+
+[33mcommit a3ec1e807b24fd42aef41b6a53b228fb3fc7834f[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 20:07:51 2025 +0300
+
+    Sync models, deps and security
+
+[33mcommit dd8357746cf6203057a80953092a1a5e2b7f469b[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 19:37:57 2025 +0300
+
+    Alias Submission to TestAttempt
+
+[33mcommit 7a421ba3ed1452962809eb69a1ed8ed51eb39d8b[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 19:29:20 2025 +0300
+
+    Add TestAttempt models
+
+[33mcommit 1bd0b99465ae8ca6a1ad4437b37f8757aa6126d0[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 19:19:17 2025 +0300
+
+    Fix tests_new get_db import
+
+[33mcommit 0284b604aaa490c61bf674722ebd21e6f47890ba[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 19:11:41 2025 +0300
+
+    Restore get_db in database.py
+
+[33mcommit 8a940204c3f4d8cab1922cfafb05e748ef758faa[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 19:01:12 2025 +0300
+
+    Fix test run UI & saving answers
+
+[33mcommit 2e2eef75cb5c5606fe0aee25e189bb23fa87fecb[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 18:50:44 2025 +0300
+
+    Fix test_run template (no index, no empty answers)
+
+[33mcommit 8fdfb63a5a20c5c74de66a80ca70664535ee7b97[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 18:12:12 2025 +0300
+
+    Fix test_run: field names + skip empty answers
+
+[33mcommit 1583fa68cf0d19b5929f313b5cec246b4a7813ab[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 18:01:26 2025 +0300
+
+    Fix test_run template (no index, proper options/answers)
+
+[33mcommit 1c7c1d9c596a2eeef337e33d0b8178d68d52ae80[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 17:47:49 2025 +0300
+
+    Fixing bugs
+
+[33mcommit 10ae70e551ae229026444eeef1c187678617081f[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 17:40:17 2025 +0300
+
+    fix test for student
+
+[33mcommit 871c1de07f605a2792b39a18829727892b5847f9[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 17:29:35 2025 +0300
+
+    Fix test run UI and results layout
+
+[33mcommit 15a6225a1ef2405138e01deaeb7b7961b724932a[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 17:09:12 2025 +0300
+
+    Fix deps to use decode_token
+
+[33mcommit faa5da08596fc17090c03e8d5adb938f93e155ef[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 17:02:16 2025 +0300
+
+    Restore require_role and role guards in deps
+
+[33mcommit 373e4710449d7a8ffd62d37cc272dea8592d2c00[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 16:57:22 2025 +0300
+
+    Add require_student and role guards
+
+[33mcommit cac757ee9b0eb16c2b191d99891ff3f85a705a6f[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 16:50:56 2025 +0300
+
+    test run UI
+
+[33mcommit 01ad9613d3b0176726f0775095638d5da3240eef[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 16:49:44 2025 +0300
+
+    Test builder + test run UI
+
+[33mcommit 414fb6bde7a969993eacc3332aa80ee888a9d46a[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 16:25:17 2025 +0300
+
+    Widen question edit layout
+
+[33mcommit 47960732ba308d69c67cb44f0835e26931878cb5[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 16:17:40 2025 +0300
+
+    Tweak question edit layout
+
+[33mcommit d16ff40af00338480905b020816e7dbc7069877c[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 15:56:34 2025 +0300
+
+    Fix /ui/questions to pass library structure
+
+[33mcommit 9738ff05930dc5061c3a73a1183d48960e989674[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 15:43:57 2025 +0300
+
+    Fix deps and require_teacher_or_admin
+
+[33mcommit 2d67f9e193647cfb28b257556995bddb56c1b070[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 15:34:10 2025 +0300
+
+    Fix
+
+[33mcommit d4e3ca8c30220aef4426221a6ebd44f9d2f07095[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 15:33:43 2025 +0300
+
+    Sync security module
+
+[33mcommit 856a259510b3b1ee8f1c2b6dd9469a5ad3c19b25[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 15:16:02 2025 +0300
+
+    Library tree, images preview, single-choice edit fix
+
+[33mcommit 2f0886d58da19191b48621ca5f70b4442bbdf803[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 04:54:27 2025 +0300
+
+    Fix models: relationships + metadata
+
+[33mcommit c7e6a8d82466b407953bcde6b64f81d65af853bd[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 04:42:02 2025 +0300
+
+    Update import and question metadata
+
+[33mcommit 4735105bf6de2818d12f57ca4d3f25fb111479a9[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 04:08:52 2025 +0300
+
+    Improve import: выбор одного варианта из md
+
+[33mcommit 5951d312b564d235c566cb680c0f27980f8e35ec[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 03:55:24 2025 +0300
+
+    Improve markdown import (Вопрос/Ответ)
+
+[33mcommit f5c559d8cc9dbfb7047ffe5b16150cf16468d863[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 03:47:13 2025 +0300
+
+    Fix import: ZIP with md files
+
+[33mcommit 8e5a3483156e5e89c70f74f8df96e3e22dc77119[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 03:40:36 2025 +0300
+
+    Add edit and delete for questions
+
+[33mcommit 189e316b5a54f66f0fd0b4d1ffd96dd8aa54a32c[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 03:34:15 2025 +0300
+
+    Add markdown import UI
+
+[33mcommit 0584b10c405aecbed46b93f8273a8af0ffc9ee89[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 03:27:58 2025 +0300
+
+    Fix /ui/account route and keep invite codes
+
+[33mcommit 908a97d8f12d7e3fc47e71c685d13982bbb2cca9[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 03:22:14 2025 +0300
+
+    Add invite code based registration
+
+[33mcommit 51f74001e178518d38877f69f7af67de6deddb31[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 03:14:39 2025 +0300
+
+    Add personal cabinet and role-based UI
+
+[33mcommit c76aeea0fbf15537b705f2b0cdcbc2a99ed04224[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 03:01:17 2025 +0300
+
+    Add admin UI for user roles
+
+[33mcommit 62b8350f3785339efec7a786d2c00d30a0d8e04f[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 01:35:59 2025 +0300
+
+    Add Jinja2 for templates
+
+[33mcommit bf9fee83644dc0ef99b0777a1bbb280552ac4624[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 01:25:31 2025 +0300
+
+    Add HTML UI
+
+[33mcommit d1afb03b804ed1052213498bd588edfb50be1764[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 00:56:41 2025 +0300
+
+    ...
+
+[33mcommit 2ee5fb003f27d8ff9c9f9f0795510eeca1e2a79f[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 00:56:14 2025 +0300
+
+    ...
+
+[33mcommit 1275363d736828825b5bf45c698a85ccca17802a[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 00:44:13 2025 +0300
+
+    Test deploy
+
+[33mcommit 51c482a60782cbcce2565c84e50e3142dd91be36[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 00:42:01 2025 +0300
+
+    Add deploy workflow
+
+[33mcommit 8cd486d96b8286cc794412711c522c110259b2e3[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sun Nov 23 00:09:47 2025 +0300
+
+    Update project
+
+[33mcommit 419433267c0fd619d126901cd74d3d374a30a581[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sat Nov 22 23:27:26 2025 +0300
+
+    Add PyJWT
+
+[33mcommit 1205f05d4a1c6449815ea82d6df79cdd51356528[m
+Author: Svyat <swqt2070@gmail.com>
+Date:   Sat Nov 22 23:15:34 2025 +0300
+
+    Init FastAPI project structure
+
+[

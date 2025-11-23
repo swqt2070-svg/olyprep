@@ -47,6 +47,10 @@ class Settings:
             os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200")
         )
 
+        self.jwt_secret_key = self.JWT_SECRET_KEY
+        self.jwt_algorithm = self.JWT_ALGORITHM
+        self.access_token_expire_minutes = self.ACCESS_TOKEN_EXPIRE_MINUTES
+
 
 # Глобальный объект настроек
 settings = Settings()
