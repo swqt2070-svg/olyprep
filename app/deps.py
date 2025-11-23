@@ -1,19 +1,18 @@
-from __future__ import annotations
-
-from typing import Generator, Optional
+from typing import Generator, Optional, Callable
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import User
-from app.security import decode_token
+from app.security import verify_token
 
 
 # ---------- DB SESSION ----------
 
 
 def get_db() -> Generator[Session, None, None]:
+    """Отдаёт сессию БД в зависимость и корректно её закрывает."""
     db = SessionLocal()
     try:
         yield db
@@ -21,99 +20,109 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-# ---------- AUTH HELPERS ----------
-
-
-def _extract_token(request: Request) -> Optional[str]:
-    """
-    Достаём access_token:
-    1) из cookie `access_token`
-    2) если нет — из Authorization: Bearer <token>
-    """
-    token = request.cookies.get("access_token")
-    if token:
-        return token
-
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        return auth_header[7:]
-
-    return None
+# ---------- AUTH / CURRENT USER ----------
 
 
 def get_current_user(
     request: Request,
     db: Session = Depends(get_db),
 ) -> User:
-    token = _extract_token(request)
+    """
+    Достаёт JWT из cookie `access_token`, декодирует его через verify_token
+    и возвращает текущего пользователя, иначе 401.
+    """
+    token: Optional[str] = request.cookies.get("access_token")
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Не авторизован",
+            detail="Not authenticated",
         )
 
-    try:
-        data = decode_token(token)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Невалидный токен",
-        )
+    data = verify_token(token)  # verify_token должен вернуть payload (dict) с id
 
     user_id = data.get("id")
-    if not user_id:
+    if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Невалидный токен (нет id пользователя)",
+            detail="Invalid token payload",
         )
 
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Пользователь не найден",
+            detail="User not found",
         )
 
     return user
 
 
-# ---------- ROLE GUARDS ----------
-
-
-def require_active_user(user: User = Depends(get_current_user)) -> User:
-    """
-    Просто требует валидного залогиненного пользователя.
-    Используем там, где не важна конкретная роль.
-    """
-    return user
+# ---------- ROLE HELPERS ----------
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Доступ только для admin."""
     if user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Требуется роль admin",
+            detail="Admin access required",
+        )
+    return user
+
+
+def require_teacher(user: User = Depends(get_current_user)) -> User:
+    """Доступ для teacher и admin."""
+    if user.role not in ("teacher", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher access required",
         )
     return user
 
 
 def require_teacher_or_admin(user: User = Depends(get_current_user)) -> User:
+    """Общая проверка для teacher или admin."""
     if user.role not in ("teacher", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Требуется роль teacher или admin",
+            detail="Teacher or admin access required",
         )
     return user
 
 
 def require_student(user: User = Depends(get_current_user)) -> User:
     """
-    Гард для учеников (для прохождения тестов и т.п.).
-    Именно этой функции не хватало, из‑за чего падал импорт.
+    Доступ только для student (и, по желанию, admin — чтобы ты мог тестить).
+    Если хочешь, чтобы админ мог проходить тесты как студент — оставь admin тут.
+    Если нет — измени условие на user.role != "student".
     """
-    if user.role != "student":
+    if user.role not in ("student", "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Требуется роль student",
+            detail="Student access required",
         )
     return user
+
+
+def require_role(required_role: str) -> Callable[[User], User]:
+    """
+    Фабрика зависимости по роли.
+
+    Использование в роутере обычно такое:
+        @router.get("/admin-only")
+        def some_view(current_user: User = Depends(require_role("admin"))):
+            ...
+
+    То есть require_role("admin") возвращает функцию-Depends, которая уже
+    проверяет роль и отдаёт current_user.
+    """
+
+    def dependency(user: User = Depends(get_current_user)) -> User:
+        if user.role != required_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{required_role} access required",
+            )
+        return user
+
+    return dependency
