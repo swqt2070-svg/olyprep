@@ -1536,15 +1536,100 @@ async def test_submit(
             },
         )
 
+        return templates.TemplateResponse(
+            "test_run.html",
+            {
+                "request": request,
+                "user": user,
+                "test": test,
+                "items": items,
+                "max_points": max_points,
+                "submission": submission,
+                "result": result,
+            },
+        )
+
+
+@router.get("/submissions/{submission_id}", response_class=HTMLResponse)
+async def submission_detail(
+    submission_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    sub = db.get(Submission, submission_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="submission not found")
+
+    test = db.get(Test, sub.test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="test not found")
+
+    tqs: List[TestQuestion] = (
+        db.query(TestQuestion)
+        .filter(TestQuestion.test_id == test.id)
+        .order_by(TestQuestion.order.asc())
+        .all()
+    )
+    answers_map: dict[int, Answer] = {a.question_id: a for a in getattr(sub, "answers", [])}
+
+    rows = []
+    total_score = sub.score or 0
+    max_total = 0
+    for idx, link in enumerate(tqs, 1):
+        q = link.question or db.get(Question, link.question_id)
+        if hasattr(q, "question") and not hasattr(q, "options"):
+            if q.question is not None:
+                q = q.question
+        max_total += getattr(link, "points", 0) or 0
+        ans = answers_map.get(q.id)
+        given_raw = ""
+        if ans:
+            given_raw = getattr(ans, "answer_text", "") or getattr(ans, "given", "") or ""
+        your_answer = given_raw or "—"
+        correct_answer = ""
+        if q.answer_type == "text":
+            correct_answer = (q.correct or "") if hasattr(q, "correct") else ""
+        else:
+            opts = []
+            if q.options:
+                try:
+                    opts = json.loads(q.options)
+                except Exception:
+                    opts = []
+            try:
+                correct_idx = int(q.correct) if q.correct is not None else None
+            except (TypeError, ValueError):
+                correct_idx = None
+            try:
+                user_idx = int(getattr(ans, "selected_answer_id", None)) if ans else None
+            except (TypeError, ValueError):
+                user_idx = None
+            if correct_idx is not None and opts and 0 <= correct_idx < len(opts):
+                correct_answer = str(opts[correct_idx])
+            else:
+                correct_answer = str(q.correct or "")
+            if user_idx is not None and opts and 0 <= user_idx < len(opts):
+                your_answer = str(opts[user_idx])
+        rows.append(
+            {
+                "index": idx,
+                "question": q,
+                "your_answer": your_answer,
+                "correct_answer": correct_answer,
+                "score": getattr(ans, "points", 0) if ans else 0,
+                "max_points": getattr(link, "points", 0) or 0,
+            }
+        )
+
     return templates.TemplateResponse(
-        "test_run.html",
+        "test_result.html",
         {
             "request": request,
             "user": user,
             "test": test,
-            "items": items,
-            "max_points": max_points,
-            "submission": submission,
-            "result": result,
+            "rows": rows,
+            "total_score": total_score,
+            "max_total": max_total,
         },
     )
