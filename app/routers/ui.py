@@ -8,18 +8,18 @@ from fastapi import (
 )
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 from typing import List, Optional
+import json
 
 from app.deps import get_db, get_current_user, require_role
 from app.models import User, Question, Test, TestQuestion, Submission, Answer
 from app.security import hash_password, verify_password, create_token
-import json
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
 
-# Коды приглашений (можешь поменять на свои значения)
+# Коды приглашения — поменяй на свои при желании
 STUDENT_INVITE_CODE = "STUDENT2025"
 TEACHER_INVITE_CODE = "TEACHER2025"
 
@@ -28,7 +28,105 @@ def redirect(url: str) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=status.HTTP_303_SEE_OTHER)
 
 
+# ---------- ВСПОМОГАТЕЛЬНОЕ: контекст для личного кабинета ----------
+
+
+def build_account_context(
+    request: Request,
+    db: Session,
+    user: User,
+    password_error: Optional[str] = None,
+    password_success: Optional[str] = None,
+):
+    student_results = None
+    teacher_results = None
+
+    # Результаты ученика — его собственные попытки
+    if user.role == "student":
+        submissions: List[Submission] = (
+            db.query(Submission)
+            .filter(Submission.user_id == user.id)
+            .order_by(Submission.id.desc())
+            .all()
+        )
+        results = []
+        for sub in submissions:
+            test = db.get(Test, sub.test_id)
+            if not test:
+                continue
+            tqs = (
+                db.query(TestQuestion)
+                .filter(TestQuestion.test_id == test.id)
+                .all()
+            )
+            max_points = sum(tq.points for tq in tqs) if tqs else 0
+            results.append(
+                {
+                    "submission": sub,
+                    "test": test,
+                    "max_points": max_points,
+                }
+            )
+        student_results = results
+
+    # Результаты учеников — видит teacher и admin
+    if user.role in ("teacher", "admin"):
+        students: List[User] = db.query(User).filter(User.role == "student").all()
+        students_map = {s.id: s for s in students}
+        student_ids = list(students_map.keys())
+
+        if student_ids:
+            submissions: List[Submission] = (
+                db.query(Submission)
+                .filter(Submission.user_id.in_(student_ids))
+                .order_by(Submission.id.desc())
+                .all()
+            )
+        else:
+            submissions = []
+
+        tests: List[Test] = db.query(Test).all()
+        tests_map = {t.id: t for t in tests}
+
+        max_points_map = {}
+        for t in tests:
+            tqs = (
+                db.query(TestQuestion)
+                .filter(TestQuestion.test_id == t.id)
+                .all()
+            )
+            max_points_map[t.id] = sum(tq.points for tq in tqs) if tqs else 0
+
+        rows = []
+        for sub in submissions:
+            student = students_map.get(sub.user_id)
+            test = tests_map.get(sub.test_id)
+            if not student or not test:
+                continue
+            max_points = max_points_map.get(test.id, 0)
+            rows.append(
+                {
+                    "submission": sub,
+                    "student": student,
+                    "test": test,
+                    "max_points": max_points,
+                }
+            )
+
+        teacher_results = rows
+
+    return {
+        "request": request,
+        "user": user,
+        "password_error": password_error,
+        "password_success": password_success,
+        "student_results": student_results,
+        "teacher_results": teacher_results,
+    }
+
+
 # ---------- AUTH UI ----------
+
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -92,11 +190,11 @@ async def register_submit(
 
     has_admin = db.query(User).filter(User.role == "admin").first() is not None
 
-    # Первый пользователь в системе — всегда admin, без кода
+    # Первый пользователь — всегда admin, без кода
     if not has_admin:
         role = "admin"
     else:
-        # Для всех остальных обязателен код
+        # Всем остальным нужен код
         if not invite_code:
             return templates.TemplateResponse(
                 "register.html",
@@ -143,6 +241,7 @@ async def logout():
 
 # ---------- DASHBOARD ----------
 
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, user: User = Depends(get_current_user)):
     return templates.TemplateResponse(
@@ -151,201 +250,21 @@ async def dashboard(request: Request, user: User = Depends(get_current_user)):
     )
 
 
-# ---------- ADMIN: управление пользователями ----------
-
-@router.get("/admin/users", response_class=HTMLResponse)
-async def admin_users_page(
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin")),
-):
-    users = db.query(User).order_by(User.id.asc()).all()
-    return templates.TemplateResponse(
-        "admin_users.html",
-        {
-            "request": request,
-            "user": user,
-            "users": users,
-            "error": None,
-            "success": None,
-        },
-    )
+# ---------- ЛИЧНЫЙ КАБИНЕТ (/ui/account) ----------
 
 
-@router.post("/admin/users/update-role", response_class=HTMLResponse)
-async def admin_update_role(
-    request: Request,
-    email: str = Form(...),
-    new_role: str = Form(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin")),
-):
-    valid_roles = ["admin", "teacher", "student"]
-    if new_role not in valid_roles:
-        users = db.query(User).order_by(User.id.asc()).all()
-        return templates.TemplateResponse(
-            "admin_users.html",
-            {
-                "request": request,
-                "user": current_user,
-                "users": users,
-                "error": "Недопустимая роль",
-                "success": None,
-            },
-            status_code=400,
-        )
-
-    target = db.query(User).filter(User.email == email.strip()).first()
-    if not target:
-        users = db.query(User).order_by(User.id.asc()).all()
-        return templates.TemplateResponse(
-            "admin_users.html",
-            {
-                "request": request,
-                "user": current_user,
-                "users": users,
-                "error": "Пользователь с такой почтой не найден",
-                "success": None,
-            },
-            status_code=404,
-        )
-
-    if target.id == current_user.id and new_role != "admin":
-        users = db.query(User).order_by(User.id.asc()).all()
-        return templates.TemplateResponse(
-            "admin_users.html",
-            {
-                "request": request,
-                "user": current_user,
-                "users": users,
-                "error": "Нельзя снять роль admin сам с себя",
-                "success": None,
-            },
-            status_code=400,
-        )
-
-    target.role = new_role
-    db.add(target)
-    db.commit()
-
-    users = db.query(User).order_by(User.id.asc()).all()
-    return templates.TemplateResponse(
-        "admin_users.html",
-        {
-            "request": request,
-            "user": current_user,
-            "users": users,
-            "error": None,
-            "success": f"Роль пользователя {target.email} изменена на {new_role}",
-        },
-    )
-
-
-# ---------- ЛИЧНЫЙ КАБИНЕТ ----------
-
-def build_profile_context(db: Session, user: User) -> dict:
-    # Результаты самого пользователя
-    subs = (
-        db.query(Submission)
-        .options(joinedload(Submission.test))
-        .filter(Submission.user_id == user.id)
-        .order_by(Submission.created_at.desc())
-        .all()
-    )
-    student_results = []
-    if subs:
-        test_ids = {s.test_id for s in subs}
-        tqs = (
-            db.query(TestQuestion)
-            .filter(TestQuestion.test_id.in_(test_ids))
-            .all()
-        )
-        max_points_map: dict[int, int] = {}
-        for tq in tqs:
-            max_points_map.setdefault(tq.test_id, 0)
-            max_points_map[tq.test_id] += tq.points
-    else:
-        max_points_map = {}
-
-    for s in subs:
-        t = s.test
-        student_results.append(
-            {
-                "test_title": t.title if t else f"Тест #{s.test_id}",
-                "score": s.score,
-                "max_points": max_points_map.get(s.test_id, 0),
-                "created_at": s.created_at,
-            }
-        )
-
-    # Результаты учеников учителя / админа (по его тестам)
-    teacher_rows = []
-    if user.role in ("teacher", "admin"):
-        tests = (
-            db.query(Test)
-            .options(
-                joinedload(Test.submissions).joinedload(Submission.user)
-            )
-            .filter(Test.owner_id == user.id)
-            .all()
-        )
-        if tests:
-            test_ids2 = [t.id for t in tests]
-            tqs2 = (
-                db.query(TestQuestion)
-                .filter(TestQuestion.test_id.in_(test_ids2))
-                .all()
-            )
-            teacher_max: dict[int, int] = {}
-            for tq in tqs2:
-                teacher_max.setdefault(tq.test_id, 0)
-                teacher_max[tq.test_id] += tq.points
-        else:
-            teacher_max = {}
-
-        for t in tests:
-            max_pts = teacher_max.get(t.id, 0)
-            for s in t.submissions:
-                student_email = s.user.email if s.user else f"ID {s.user_id}"
-                teacher_rows.append(
-                    {
-                        "test_title": t.title,
-                        "student_email": student_email,
-                        "score": s.score,
-                        "max_points": max_pts,
-                        "created_at": s.created_at,
-                    }
-                )
-
-        teacher_rows.sort(key=lambda r: r["created_at"], reverse=True)
-
-    return {
-        "student_results": student_results,
-        "teacher_rows": teacher_rows,
-    }
-
-
-@router.get("/profile", response_class=HTMLResponse)
-async def profile_page(
+@router.get("/account", response_class=HTMLResponse)
+async def account_page(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    ctx = build_profile_context(db, user)
-    return templates.TemplateResponse(
-        "profile.html",
-        {
-            "request": request,
-            "user": user,
-            "password_error": None,
-            "password_success": None,
-            **ctx,
-        },
-    )
+    ctx = build_account_context(request, db, user)
+    return templates.TemplateResponse("account.html", ctx)
 
 
-@router.post("/profile/password", response_class=HTMLResponse)
-async def profile_change_password(
+@router.post("/account/change-password", response_class=HTMLResponse)
+async def account_change_password(
     request: Request,
     current_password: str = Form(...),
     new_password: str = Form(...),
@@ -357,32 +276,98 @@ async def profile_change_password(
     success = None
 
     if not verify_password(current_password, user.password_hash):
-        error = "Текущий пароль указан неверно."
+        error = "Текущий пароль введён неверно."
     elif len(new_password) < 6:
         error = "Новый пароль должен быть не короче 6 символов."
     elif new_password != new_password2:
-        error = "Новый пароль и подтверждение не совпадают."
+        error = "Пароль и подтверждение не совпадают."
     else:
         user.password_hash = hash_password(new_password)
         db.add(user)
         db.commit()
-        success = "Пароль успешно изменён."
+        success = "Пароль успешно обновлён."
 
-    ctx = build_profile_context(db, user)
+    ctx = build_account_context(
+        request,
+        db,
+        user,
+        password_error=error,
+        password_success=success,
+    )
+    status_code = 400 if error else 200
+    return templates.TemplateResponse("account.html", ctx, status_code=status_code)
+
+
+# ---------- ADMIN USERS UI ----------
+
+
+@router.get("/admin/users", response_class=HTMLResponse)
+async def admin_users_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    users = db.query(User).order_by(User.id.asc()).all()
     return templates.TemplateResponse(
-        "profile.html",
+        "users_admin.html",
         {
             "request": request,
             "user": user,
-            "password_error": error,
-            "password_success": success,
-            **ctx,
+            "users": users,
+            "error": None,
+            "success": None,
         },
-        status_code=400 if error else 200,
+    )
+
+
+@router.post("/admin/users/set-role", response_class=HTMLResponse)
+async def admin_set_role(
+    request: Request,
+    email: str = Form(...),
+    role: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    allowed_roles = ("admin", "teacher", "student")
+
+    email = email.strip()
+    role = role.strip()
+
+    error: Optional[str] = None
+    success: Optional[str] = None
+
+    if role not in allowed_roles:
+        error = "Недопустимая роль."
+    else:
+        target = db.query(User).filter(User.email == email).first()
+        if not target:
+            error = "Пользователь с такой почтой не найден."
+        elif target.id == user.id and role != "admin":
+            error = "Нельзя понизить роль собственного админ‑аккаунта."
+        else:
+            old_role = target.role
+            target.role = role
+            db.add(target)
+            db.commit()
+            success = f"Роль пользователя {email} изменена с {old_role} на {role}."
+
+    users = db.query(User).order_by(User.id.asc()).all()
+    status_code = 400 if error else 200
+    return templates.TemplateResponse(
+        "users_admin.html",
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "error": error,
+            "success": success,
+        },
+        status_code=status_code,
     )
 
 
 # ---------- QUESTIONS UI ----------
+
 
 @router.get("/questions", response_class=HTMLResponse)
 async def questions_list(
@@ -453,7 +438,7 @@ async def question_new_submit(
             if val:
                 raw_options.append(val)
         options_json = json.dumps(raw_options, ensure_ascii=False)
-        correct = correct_index
+        correct = correct_index  # индекс правильного варианта (строкой)
 
     q = Question(
         text=text,
@@ -477,6 +462,7 @@ async def question_new_submit(
 
 # ---------- TESTS UI ----------
 
+
 @router.get("/tests", response_class=HTMLResponse)
 async def tests_list(
     request: Request,
@@ -496,7 +482,7 @@ async def tests_new(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "teacher")),
 ):
-    t = Test(title=title.strip(), owner_id=user.id)
+    t = Test(title=title.strip())
     db.add(t)
     db.commit()
     return redirect("/ui/tests")
@@ -514,7 +500,9 @@ async def test_view(
     if not test:
         raise HTTPException(status_code=404, detail="test not found")
 
-    tqs: List[TestQuestion] = db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+    tqs: List[TestQuestion] = (
+        db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+    )
     items = []
     max_points = 0
     for tq in tqs:
@@ -597,7 +585,9 @@ async def test_submit(
     if not submission or submission.user_id != user.id or submission.test_id != test_id:
         raise HTTPException(status_code=400, detail="invalid submission")
 
-    tqs: List[TestQuestion] = db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+    tqs: List[TestQuestion] = (
+        db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+    )
 
     items = []
     max_points = 0
@@ -624,7 +614,7 @@ async def test_submit(
                 correct_flag = 1 if ok else 0
                 earned = tq.points if ok else 0
             elif q.answer_type == "single":
-                ok = (q.correct == given)
+                ok = q.correct == given
                 correct_flag = 1 if ok else 0
                 earned = tq.points if ok else 0
             else:
@@ -635,7 +625,7 @@ async def test_submit(
             submission_id=submission.id,
             question_id=q.id,
             given=given,
-            correct=bool(correct_flag),
+            correct=correct_flag,
             points=earned,
         )
         db.add(ans)
