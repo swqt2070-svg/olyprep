@@ -1111,6 +1111,12 @@ async def test_builder_new_post(
     title = (form.get("title") or "").strip()
     description = (form.get("description") or "").strip()
     show_correct = "show_correct_answers" in form
+    try:
+        max_attempts = int(form.get("max_attempts") or 0)
+    except ValueError:
+        max_attempts = 0
+    if max_attempts < 0:
+        max_attempts = 0
 
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
     selection: list[tuple[int, int]] = []
@@ -1140,6 +1146,7 @@ async def test_builder_new_post(
                 "test": None,
                 "questions": questions,
                 "selected": {},
+                "max_attempts": max_attempts,
                 "error": error,
             },
             status_code=400,
@@ -1150,6 +1157,7 @@ async def test_builder_new_post(
         description=description or None,
         show_answers_to_student=show_correct,
         created_by_id=user.id if hasattr(user, "id") else None,
+        max_attempts=max_attempts or None,
     )
     db.add(t)
     db.flush()
@@ -1216,6 +1224,12 @@ async def test_builder_edit_post(
     title = (form.get("title") or "").strip()
     description = (form.get("description") or "").strip()
     show_correct = "show_correct_answers" in form
+    try:
+        max_attempts = int(form.get("max_attempts") or 0)
+    except ValueError:
+        max_attempts = 0
+    if max_attempts < 0:
+        max_attempts = 0
 
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
     selection: list[tuple[int, int]] = []
@@ -1251,6 +1265,7 @@ async def test_builder_edit_post(
                 "test": test,
                 "questions": questions,
                 "selected": selected,
+                "max_attempts": max_attempts,
                 "error": error,
             },
             status_code=400,
@@ -1259,6 +1274,7 @@ async def test_builder_edit_post(
     test.title = title
     test.description = description or None
     test.show_answers_to_student = show_correct
+    test.max_attempts = max_attempts or None
     db.add(test)
 
     db.query(TestQuestion).filter(TestQuestion.test_id == test.id).delete()

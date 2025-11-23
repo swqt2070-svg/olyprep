@@ -25,6 +25,11 @@
             </div>
 
             <div class="form-group form-group-inline">
+                <label for="max_attempts">???????? ??????? (0 ? ??? ???????????)</label>
+                <input type="number" id="max_attempts" name="max_attempts" class="input-number" min="0"
+                       value="{{ test.max_attempts if test and test.max_attempts is not none else 0 }}">
+            </div>
+            <div class="form-group form-group-inline">
                 <label class="checkbox-label">
                     <input type="checkbox" name="show_correct_answers"
                            {% if test and test.show_correct_answers %}checked{% elif not test %}checked{% endif %}>

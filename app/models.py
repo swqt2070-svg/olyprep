@@ -130,6 +130,7 @@ class Test(Base):
     # настройки теста
     is_public: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     show_answers_to_student: Mapped[bool] = Column(Boolean, default=True, nullable=False)
+    max_attempts: Mapped[Optional[int]] = Column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
 

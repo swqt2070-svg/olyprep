@@ -77,15 +77,29 @@ def _get_or_create_attempt(
     Берём последнюю попытку пользователя по тесту.
     Если нет — создаём новую.
     """
-    stmt = (
-        select(TestAttempt)
-        .where(
-            TestAttempt.test_id == test.id,
-            TestAttempt.user_id == user_id,
+    attempt: Optional[TestAttempt] = None
+    if hasattr(TestAttempt, "finished_at"):
+        stmt_active = (
+            select(TestAttempt)
+            .where(
+                TestAttempt.test_id == test.id,
+                TestAttempt.user_id == user_id,
+                TestAttempt.finished_at.is_(None),
+            )
+            .order_by(TestAttempt.id.desc())
         )
-        .order_by(TestAttempt.id.desc())
-    )
-    attempt: Optional[TestAttempt] = db.scalars(stmt).first()
+        attempt = db.scalars(stmt_active).first()
+
+    if attempt is None:
+        stmt_last = (
+            select(TestAttempt)
+            .where(
+                TestAttempt.test_id == test.id,
+                TestAttempt.user_id == user_id,
+            )
+            .order_by(TestAttempt.id.desc())
+        )
+        attempt = db.scalars(stmt_last).first()
 
     if attempt is None:
         attempt = TestAttempt(test_id=test.id, user_id=user_id)
@@ -214,6 +228,15 @@ async def start_test(
     questions = _get_questions_for_test(test)
     if not questions:
         raise HTTPException(status_code=400, detail="В тесте нет вопросов")
+
+    if getattr(test, "max_attempts", None):
+        attempts_count = (
+            db.query(TestAttempt)
+            .filter(TestAttempt.test_id == test.id, TestAttempt.user_id == user.id)
+            .count()
+        )
+        if attempts_count >= test.max_attempts:
+            raise HTTPException(status_code=400, detail="Достигнут лимит попыток для этого теста")
 
     _get_or_create_attempt(db, test, user.id)
     db.commit()
@@ -373,8 +396,42 @@ async def run_test_post(
         elif action == "save":
             next_position = position
         elif action == "finish":
+            # Подсчёт результата
+            answers_map = _load_attempt_answers_map(db, attempt)
+            score = 0
+            max_points = sum((getattr(tq, "points", 0) or 0) for tq in tqs)
+            for link in tqs:
+                q = link.question if hasattr(link, "question") and link.question else db.get(Question, link.question_id)
+                if hasattr(q, "question") and not hasattr(q, "options"):
+                    if q.question is not None:
+                        q = q.question
+                taa = answers_map.get(q.id)
+                selected_id, text_val = _extract_answer_values(taa)
+
+                if getattr(q, "answer_type", "text") == "text":
+                    gt = (q.correct or "").strip().lower() if hasattr(q, "correct") else ""
+                    uv = (text_val or "").strip().lower()
+                    if gt and uv and gt == uv:
+                        score += getattr(link, "points", 0) or 0
+                else:
+                    try:
+                        correct_idx = int(q.correct) if q.correct is not None else None
+                    except (TypeError, ValueError):
+                        correct_idx = None
+                    try:
+                        user_idx = int(selected_id) if selected_id is not None else None
+                    except (TypeError, ValueError):
+                        user_idx = None
+                    if correct_idx is not None and user_idx is not None and correct_idx == user_idx:
+                        score += getattr(link, "points", 0) or 0
+
             if hasattr(attempt, "finished_at"):
                 attempt.finished_at = datetime.utcnow()
+            if hasattr(attempt, "score"):
+                attempt.score = score
+            if hasattr(attempt, "max_score"):
+                attempt.max_score = max_points
+            db.add(attempt)
             db.commit()
             return RedirectResponse(
                 url="/ui/account",

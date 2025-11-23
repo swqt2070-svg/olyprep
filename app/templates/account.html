@@ -92,7 +92,7 @@
                         <td>{{ loop.index }}</td>
                         <td>{{ r.test.title }}</td>
                         <td>{{ r.submission.score }} / {{ r.max_points }}</td>
-                        <td>{{ r.submission.created_at }}</td>
+                        <td>{% if r.submission.started_at %}{{ r.submission.started_at.strftime("%d.%m.%Y %H:%M") }}{% else %}—{% endif %}</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -126,7 +126,7 @@
                         <td>{{ r.student.email }}</td>
                         <td>{{ r.test.title }}</td>
                         <td>{{ r.submission.score }} / {{ r.max_points }}</td>
-                        <td>{{ r.submission.created_at }}</td>
+                        <td>{% if r.submission.started_at %}{{ r.submission.started_at.strftime("%d.%m.%Y %H:%M") }}{% else %}—{% endif %}</td>
                     </tr>
                 {% endfor %}
             </tbody>
