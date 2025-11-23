@@ -464,6 +464,9 @@
                 <a href="/ui/dashboard">Главная</a>
                 <a href="/ui/questions">Библиотека задач</a>
                 <a href="/ui/tests" class="nav-primary">Тесты</a>
+                {% if user and user.role in ['admin', 'teacher'] %}
+                    <a href="/ui/import">Импорт</a>
+                {% endif %}
             </nav>
         </div>
         <div class="topbar-right">

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Импорт заданий — OlyPrep{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title">Импорт заданий из .md</div>
+        <div class="page-subtitle">
+            Загрузите .zip‑архив с Obsidian‑заметками (.md). Для строк вида «Ответ: ...» ключ заполнится автоматически.
+        </div>
+    </div>
+</div>
+
+<section class="card">
+    {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/ui/import" enctype="multipart/form-data" class="form">
+        <div class="field">
+            <label class="field-label">Архив .zip с .md файлами <span>*</span></label>
+            <input type="file" name="archive" accept=".zip" required>
+            <p class="muted">
+                Внутри архива будут обработаны все файлы с расширением <code>.md</code>.
+                Остальные файлы (картинки и т.п.) пока игнорируются (MVP).
+            </p>
+        </div>
+        <button type="submit" class="btn btn-primary">Импортировать</button>
+    </form>
+
+    {% if summary %}
+        <hr style="border:none; border-top:1px solid rgba(148,163,184,0.35); margin:1.1rem 0;">
+        <h2 style="font-size:1.0rem; margin-bottom:0.3rem;">Результат импорта</h2>
+        <p class="muted">
+            Архив: <strong>{{ summary.filename }}</strong><br>
+            Импортировано задач: <strong>{{ summary.imported_count }}</strong><br>
+            Пропущено файлов: <strong>{{ summary.skipped_count }}</strong>
+        </p>
+
+        {% if summary.created_questions and summary.created_questions|length > 0 %}
+            <section class="table-card" style="margin-top:0.7rem;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:70px;">ID</th>
+                            <th>Текст задачи (обрезан)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for q in summary.created_questions[:20] %}
+                            <tr>
+                                <td>#{{ q.id }}</td>
+                                <td>
+                                    {{ q.text[:140] }}{% if q.text|length > 140 %}…{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if summary.created_questions|length > 20 %}
+                    <p class="muted" style="margin-top:0.4rem;">
+                        Показаны первые 20 задач из {{ summary.created_questions|length }}.
+                    </p>
+                {% endif %}
+            </section>
+        {% endif %}
+    {% endif %}
+</section>
+{% endblock %}

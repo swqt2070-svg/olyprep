@@ -5,12 +5,17 @@ from fastapi import (
     Form,
     status,
     HTTPException,
+    UploadFile,
+    File,
 )
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
+import io
+import zipfile
+import re
 
 from app.deps import get_db, get_current_user, require_role
 from app.models import User, Question, Test, TestQuestion, Submission, Answer
@@ -19,7 +24,7 @@ from app.security import hash_password, verify_password, create_token
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
 
-# Коды приглашения — поменяй на свои при желании
+# Коды приглашения — можешь поменять на свои
 STUDENT_INVITE_CODE = "STUDENT2025"
 TEACHER_INVITE_CODE = "TEACHER2025"
 
@@ -28,100 +33,48 @@ def redirect(url: str) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=status.HTTP_303_SEE_OTHER)
 
 
-# ---------- ВСПОМОГАТЕЛЬНОЕ: контекст для личного кабинета ----------
+# ---------- ВСПОМОГАТЕЛЬНОЕ: парсер Markdown → Question ----------
 
 
-def build_account_context(
-    request: Request,
-    db: Session,
-    user: User,
-    password_error: Optional[str] = None,
-    password_success: Optional[str] = None,
-):
-    student_results = None
-    teacher_results = None
+def parse_markdown_to_question(raw: str) -> Optional[dict]:
+    """
+    Простая эвристика:
+    - ищем строку вида 'Ответ: ...' или 'Answer: ...' (регистр не важен);
+    - всё до этой строки — текст задачи, после ':' — правильный текстовый ответ;
+    - если такой строки нет — вся заметка = текст задачи, без ключа.
+    """
+    text = raw.strip()
+    if not text:
+        return None
 
-    # Результаты ученика — его собственные попытки
-    if user.role == "student":
-        submissions: List[Submission] = (
-            db.query(Submission)
-            .filter(Submission.user_id == user.id)
-            .order_by(Submission.id.desc())
-            .all()
-        )
-        results = []
-        for sub in submissions:
-            test = db.get(Test, sub.test_id)
-            if not test:
-                continue
-            tqs = (
-                db.query(TestQuestion)
-                .filter(TestQuestion.test_id == test.id)
-                .all()
-            )
-            max_points = sum(tq.points for tq in tqs) if tqs else 0
-            results.append(
-                {
-                    "submission": sub,
-                    "test": test,
-                    "max_points": max_points,
-                }
-            )
-        student_results = results
+    lines = text.splitlines()
+    answer_line_idx = None
+    answer_value = None
 
-    # Результаты учеников — видит teacher и admin
-    if user.role in ("teacher", "admin"):
-        students: List[User] = db.query(User).filter(User.role == "student").all()
-        students_map = {s.id: s for s in students}
-        student_ids = list(students_map.keys())
+    for idx, line in enumerate(lines):
+        m = re.match(r"^\s*(Ответ|Answer)\s*[:\-]\s*(.+)$", line, re.IGNORECASE)
+        if m:
+            answer_line_idx = idx
+            answer_value = m.group(2).strip()
+            break
 
-        if student_ids:
-            submissions: List[Submission] = (
-                db.query(Submission)
-                .filter(Submission.user_id.in_(student_ids))
-                .order_by(Submission.id.desc())
-                .all()
-            )
-        else:
-            submissions = []
+    if answer_line_idx is not None:
+        question_text = "\n".join(lines[:answer_line_idx]).strip()
+        if not question_text:
+            question_text = text
+        return {
+            "text": question_text,
+            "answer_type": "text",
+            "correct": answer_value,
+            "options_json": None,
+        }
 
-        tests: List[Test] = db.query(Test).all()
-        tests_map = {t.id: t for t in tests}
-
-        max_points_map = {}
-        for t in tests:
-            tqs = (
-                db.query(TestQuestion)
-                .filter(TestQuestion.test_id == t.id)
-                .all()
-            )
-            max_points_map[t.id] = sum(tq.points for tq in tqs) if tqs else 0
-
-        rows = []
-        for sub in submissions:
-            student = students_map.get(sub.user_id)
-            test = tests_map.get(sub.test_id)
-            if not student or not test:
-                continue
-            max_points = max_points_map.get(test.id, 0)
-            rows.append(
-                {
-                    "submission": sub,
-                    "student": student,
-                    "test": test,
-                    "max_points": max_points,
-                }
-            )
-
-        teacher_results = rows
-
+    # fallback: нет явного "Ответ: ..."
     return {
-        "request": request,
-        "user": user,
-        "password_error": password_error,
-        "password_success": password_success,
-        "student_results": student_results,
-        "teacher_results": teacher_results,
+        "text": text,
+        "answer_type": "text",
+        "correct": "",
+        "options_json": None,
     }
 
 
@@ -190,11 +143,10 @@ async def register_submit(
 
     has_admin = db.query(User).filter(User.role == "admin").first() is not None
 
-    # Первый пользователь — всегда admin, без кода
+    # первый пользователь в системе — админ без кода
     if not has_admin:
         role = "admin"
     else:
-        # Всем остальным нужен код
         if not invite_code:
             return templates.TemplateResponse(
                 "register.html",
@@ -253,6 +205,105 @@ async def dashboard(request: Request, user: User = Depends(get_current_user)):
 # ---------- ЛИЧНЫЙ КАБИНЕТ (/ui/account) ----------
 
 
+def build_account_context(
+    request: Request,
+    db: Session,
+    user: User,
+    password_error: Optional[str] = None,
+    password_success: Optional[str] = None,
+):
+    student_results = None
+    teacher_results = None
+
+    # История попыток ученика
+    if user.role == "student":
+        submissions: List[Submission] = (
+            db.query(Submission)
+            .filter(Submission.user_id == user.id)
+            .order_by(Submission.id.desc())
+            .all()
+        )
+        results = []
+        for sub in submissions:
+            test = db.get(Test, sub.test_id)
+            if not test:
+                continue
+            tqs = (
+                db.query(TestQuestion)
+                .filter(TestQuestion.test_id == test.id)
+                .all()
+            )
+            max_points = sum(tq.points for tq in tqs) if tqs else 0
+            results.append(
+                {
+                    "submission": sub,
+                    "test": test,
+                    "max_points": max_points,
+                }
+            )
+        student_results = results
+
+    # Результаты учеников (teacher/admin)
+    if user.role in ("teacher", "admin"):
+        students: List[User] = db.query(User).filter(User.role == "student").all()
+        student_ids = [s.id for s in students]
+        students_map = {s.id: s for s in students}
+
+        if student_ids:
+            submissions2: List[Submission] = (
+                db.query(Submission)
+                .filter(Submission.user_id.in_(student_ids))
+                .order_by(Submission.id.desc())
+                .all()
+            )
+        else:
+            submissions2 = []
+
+        tests: List[Test] = db.query(Test).all()
+        tests_map = {t.id: t for t in tests}
+        test_ids = [t.id for t in tests]
+
+        if test_ids:
+            tqs2: List[TestQuestion] = (
+                db.query(TestQuestion)
+                .filter(TestQuestion.test_id.in_(test_ids))
+                .all()
+            )
+            max_points_map: dict[int, int] = {}
+            for tq in tqs2:
+                max_points_map.setdefault(tq.test_id, 0)
+                max_points_map[tq.test_id] += tq.points
+        else:
+            max_points_map = {}
+
+        rows = []
+        for sub in submissions2:
+            student = students_map.get(sub.user_id)
+            test = tests_map.get(sub.test_id)
+            if not student or not test:
+                continue
+            max_points = max_points_map.get(test.id, 0)
+            rows.append(
+                {
+                    "submission": sub,
+                    "student": student,
+                    "test": test,
+                    "max_points": max_points,
+                }
+            )
+
+        teacher_results = rows
+
+    return {
+        "request": request,
+        "user": user,
+        "password_error": password_error,
+        "password_success": password_success,
+        "student_results": student_results,
+        "teacher_results": teacher_results,
+    }
+
+
 @router.get("/account", response_class=HTMLResponse)
 async def account_page(
     request: Request,
@@ -287,18 +338,15 @@ async def account_change_password(
         db.commit()
         success = "Пароль успешно обновлён."
 
-    ctx = build_account_context(
-        request,
-        db,
-        user,
-        password_error=error,
-        password_success=success,
+    ctx = build_account_context(request, db, user, error, success)
+    return templates.TemplateResponse(
+        "account.html",
+        ctx,
+        status_code=400 if error else 200,
     )
-    status_code = 400 if error else 200
-    return templates.TemplateResponse("account.html", ctx, status_code=status_code)
 
 
-# ---------- ADMIN USERS UI ----------
+# ---------- ADMIN: пользователи ----------
 
 
 @router.get("/admin/users", response_class=HTMLResponse)
@@ -363,6 +411,108 @@ async def admin_set_role(
             "success": success,
         },
         status_code=status_code,
+    )
+
+
+# ---------- IMPORT UI (/ui/import) ----------
+
+
+@router.get("/import", response_class=HTMLResponse)
+async def import_page(
+    request: Request,
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    return templates.TemplateResponse(
+        "import.html",
+        {
+            "request": request,
+            "user": user,
+            "error": None,
+            "summary": None,
+        },
+    )
+
+
+@router.post("/import", response_class=HTMLResponse)
+async def import_submit(
+    request: Request,
+    archive: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    error = None
+    summary = None
+    created_questions: List[Question] = []
+
+    if not archive.filename.lower().endswith(".zip"):
+        error = "Ожидается .zip архив с .md файлами."
+        return templates.TemplateResponse(
+            "import.html",
+            {"request": request, "user": user, "error": error, "summary": None},
+            status_code=400,
+        )
+
+    try:
+        data = await archive.read()
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except Exception:
+        error = "Не удалось прочитать архив. Проверьте, что это корректный .zip файл."
+        return templates.TemplateResponse(
+            "import.html",
+            {"request": request, "user": user, "error": error, "summary": None},
+            status_code=400,
+        )
+
+    imported_count = 0
+    skipped_count = 0
+
+    for name in zf.namelist():
+        if name.endswith("/") or not name.lower().endswith(".md"):
+            continue
+
+        try:
+            raw_bytes = zf.read(name)
+        except KeyError:
+            continue
+
+        try:
+            raw_text = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            raw_text = raw_bytes.decode("cp1251", errors="ignore")
+
+        parsed = parse_markdown_to_question(raw_text)
+        if not parsed:
+            skipped_count += 1
+            continue
+
+        q = Question(
+            text=parsed["text"],
+            answer_type=parsed["answer_type"],
+            correct=parsed["correct"],
+            options=parsed["options_json"],
+        )
+        db.add(q)
+        db.flush()
+        created_questions.append(q)
+        imported_count += 1
+
+    db.commit()
+
+    summary = {
+        "filename": archive.filename,
+        "imported_count": imported_count,
+        "skipped_count": skipped_count,
+        "created_questions": created_questions,
+    }
+
+    return templates.TemplateResponse(
+        "import.html",
+        {
+            "request": request,
+            "user": user,
+            "error": None,
+            "summary": summary,
+        },
     )
 
 
@@ -438,7 +588,7 @@ async def question_new_submit(
             if val:
                 raw_options.append(val)
         options_json = json.dumps(raw_options, ensure_ascii=False)
-        correct = correct_index  # индекс правильного варианта (строкой)
+        correct = correct_index
 
     q = Question(
         text=text,
@@ -501,7 +651,9 @@ async def test_view(
         raise HTTPException(status_code=404, detail="test not found")
 
     tqs: List[TestQuestion] = (
-        db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+        db.query(TestQuestion)
+        .filter(TestQuestion.test_id == test_id)
+        .all()
     )
     items = []
     max_points = 0
@@ -586,7 +738,9 @@ async def test_submit(
         raise HTTPException(status_code=400, detail="invalid submission")
 
     tqs: List[TestQuestion] = (
-        db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+        db.query(TestQuestion)
+        .filter(TestQuestion.test_id == test_id)
+        .all()
     )
 
     items = []
@@ -614,7 +768,7 @@ async def test_submit(
                 correct_flag = 1 if ok else 0
                 earned = tq.points if ok else 0
             elif q.answer_type == "single":
-                ok = q.correct == given
+                ok = (q.correct == given)
                 correct_flag = 1 if ok else 0
                 earned = tq.points if ok else 0
             else:
@@ -625,7 +779,7 @@ async def test_submit(
             submission_id=submission.id,
             question_id=q.id,
             given=given,
-            correct=correct_flag,
+            correct=bool(correct_flag),
             points=earned,
         )
         db.add(ans)
