@@ -1303,7 +1303,7 @@ async def test_view(
             continue
         opts = json.loads(q.options) if q.options else None
         max_points += tq.points
-        items.append({"tq": tq, "q": q, "options": opts, "given": given, "earned": earned})
+        items.append({"tq": tq, "q": q, "options": opts, "given": None, "earned": 0})
 
     submission = None
     if submission_id is not None:
