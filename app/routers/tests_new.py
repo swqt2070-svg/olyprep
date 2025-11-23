@@ -14,7 +14,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.deps import get_db, require_student
+from app.deps import get_db, get_current_user
 from app.models import (
     Test,
     Question,
@@ -202,7 +202,7 @@ async def start_test(
     request: Request,
     test_id: int,
     db: Session = Depends(get_db),
-    user=Depends(require_student),
+    user=Depends(get_current_user),
 ):
     """
     Старт теста -> редирект на 1‑й вопрос.
@@ -227,7 +227,7 @@ async def run_test_get(
     test_id: int,
     position: int,
     db: Session = Depends(get_db),
-    user=Depends(require_student),
+    user=Depends(get_current_user),
 ):
     """
     Показ вопроса № position.
@@ -283,7 +283,7 @@ async def run_test_post(
     test_id: int,
     position: int,
     db: Session = Depends(get_db),
-    user=Depends(require_student),
+    user=Depends(get_current_user),
     # поля формы
     answer_id: Optional[int] = Form(None),
     answer_text: str = Form(""),

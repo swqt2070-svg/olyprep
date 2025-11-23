@@ -36,7 +36,7 @@
                             {% if role in ["teacher", "admin"] %}
                                 <a href="/ui/tests/{{ t.id }}/edit" class="btn btn-sm">Редактировать</a>
                             {% endif %}
-                            <a href="/ui/tests/{{ t.id }}/start" class="btn btn-sm btn-primary">
+                            <a href="/ui/tests/run/{{ t.id }}" class="btn btn-sm btn-primary">
                                 Пройти
                             </a>
                         </td>
