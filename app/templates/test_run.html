@@ -191,7 +191,7 @@
             {% set q = item.question %}
         {% endif %}
 
-        {# индекс вопроса (0-based), без использования undefined index #}
+        {# индекс вопроса (0-based), без index #}
         {% set idx = 0 %}
         {% if question_index is defined %}
             {% set idx = question_index %}
@@ -241,7 +241,7 @@
             {% endif %}
         </div>
 
-        {# --- подготовка списков вариантов / текущего ответа --- #}
+        {# --- варианты ответа и текущий ответ --- #}
         {% set options_list = [] %}
         {% if options is defined and options %}
             {% set options_list = options %}
@@ -271,12 +271,10 @@
 
         <form id="test-form" method="post" style="margin-top: 1.25rem;">
 
-            {# скрытые поля, чтобы бэкенд знал, что за вопрос #}
             {% if q is not none and q.id is defined %}
                 <input type="hidden" name="question_id" value="{{ q.id }}">
             {% endif %}
             <input type="hidden" name="question_index" value="{{ idx }}">
-            {# универсальное поле для ответа — сюда JS скопирует выбранный вариант/текст #}
             <input type="hidden" name="answer" value="">
 
             {% if options_list and options_list|length > 0 %}
