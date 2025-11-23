@@ -25,9 +25,7 @@
             --shadow-sm: 0 10px 25px rgba(15, 23, 42, 0.55);
         }
 
-        *,
-        *::before,
-        *::after {
+        *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
@@ -42,10 +40,7 @@
             flex-direction: column;
         }
 
-        a {
-            color: inherit;
-            text-decoration: none;
-        }
+        a { color: inherit; text-decoration: none; }
 
         .topbar {
             position: sticky;
@@ -60,11 +55,7 @@
             backdrop-filter: blur(20px);
         }
 
-        .topbar-left {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
+        .topbar-left { display: flex; align-items: center; gap: 1rem; }
 
         .logo {
             display: inline-flex;
@@ -81,21 +72,9 @@
             text-transform: uppercase;
         }
 
-        .brand-text {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .brand-title {
-            font-size: 0.95rem;
-            font-weight: 600;
-            letter-spacing: 0.03em;
-        }
-
-        .brand-subtitle {
-            font-size: 0.72rem;
-            color: var(--text-muted);
-        }
+        .brand-text { display: flex; flex-direction: column; }
+        .brand-title { font-size: 0.95rem; font-weight: 600; letter-spacing: 0.03em; }
+        .brand-subtitle { font-size: 0.72rem; color: var(--text-muted); }
 
         .nav {
             display: flex;
@@ -135,7 +114,7 @@
         .topbar-right {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.5rem;
         }
 
         .user-pill {
@@ -158,9 +137,7 @@
             box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.15);
         }
 
-        .user-pill strong {
-            color: #e5e7eb;
-        }
+        .user-pill strong { color: #e5e7eb; }
 
         .btn {
             display: inline-flex;
@@ -213,21 +190,10 @@
             margin-bottom: 1.5rem;
         }
 
-        .page-title {
-            font-size: 1.45rem;
-            font-weight: 600;
-        }
+        .page-title { font-size: 1.45rem; font-weight: 600; }
+        .page-subtitle { margin-top: 0.25rem; font-size: 0.85rem; color: var(--text-muted); }
 
-        .page-subtitle {
-            margin-top: 0.25rem;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-        }
-
-        .page-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
+        .page-actions { display: flex; gap: 0.5rem; }
 
         .center {
             display: flex;
@@ -244,10 +210,7 @@
             padding: 1.7rem 1.8rem 1.8rem;
         }
 
-        .card-narrow {
-            width: 100%;
-            max-width: 420px;
-        }
+        .card-narrow { width: 100%; max-width: 420px; }
 
         .card-header-inline {
             display: flex;
@@ -275,28 +238,12 @@
             background: var(--accent-alt);
         }
 
-        .form {
-            display: flex;
-            flex-direction: column;
-            gap: 0.9rem;
-            margin-top: 0.25rem;
-        }
+        .form { display: flex; flex-direction: column; gap: 0.9rem; margin-top: 0.25rem; }
 
-        .field {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
+        .field { display: flex; flex-direction: column; gap: 0.25rem; }
 
-        .field-label {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-        }
-
-        .field-label span {
-            color: var(--accent-alt);
-            margin-left: 0.25rem;
-        }
+        .field-label { font-size: 0.8rem; color: var(--text-muted); }
+        .field-label span { color: var(--accent-alt); margin-left: 0.25rem; }
 
         input[type="text"],
         input[type="password"],
@@ -320,15 +267,9 @@
             box-shadow: 0 0 0 1px rgba(79,70,229,0.5);
         }
 
-        textarea {
-            resize: vertical;
-            min-height: 90px;
-        }
+        textarea { resize: vertical; min-height: 90px; }
 
-        .muted {
-            font-size: 0.78rem;
-            color: var(--text-muted);
-        }
+        .muted { font-size: 0.78rem; color: var(--text-muted); }
 
         .alert {
             border-radius: var(--radius-md);
@@ -375,36 +316,15 @@
             border: 1px solid rgba(148, 163, 184, 0.4);
         }
 
-        .stat-label {
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            margin-bottom: 0.2rem;
-        }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.2rem; }
+        .stat-value { font-size: 1.2rem; font-weight: 600; }
+        .stat-meta { margin-top: 0.3rem; font-size: 0.75rem; color: var(--text-muted); }
 
-        .stat-value {
-            font-size: 1.2rem;
-            font-weight: 600;
-        }
+        .table-card { margin-top: 0.75rem; }
 
-        .stat-meta {
-            margin-top: 0.3rem;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-        }
+        table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
 
-        .table-card {
-            margin-top: 0.75rem;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.86rem;
-        }
-
-        thead {
-            background: rgba(15,23,42,0.9);
-        }
+        thead { background: rgba(15,23,42,0.9); }
 
         th, td {
             padding: 0.55rem 0.6rem;
@@ -417,17 +337,9 @@
             border-bottom: 1px solid rgba(148, 163, 184, 0.45);
         }
 
-        tbody tr {
-            border-bottom: 1px solid rgba(30, 41, 59, 0.9);
-        }
-
-        tbody tr:last-child {
-            border-bottom: none;
-        }
-
-        tbody tr:hover {
-            background: rgba(15,23,42,0.65);
-        }
+        tbody tr { border-bottom: 1px solid rgba(30, 41, 59, 0.9); }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: rgba(15,23,42,0.65); }
 
         .badge {
             display: inline-flex;
@@ -451,10 +363,6 @@
             background: rgba(59,130,246,0.12);
         }
 
-        .page-actions form input[type="text"] {
-            min-width: 200px;
-        }
-
         .question-options-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -462,15 +370,8 @@
             margin-top: 0.4rem;
         }
 
-        .option-field {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .option-field input[type="text"] {
-            flex: 1;
-        }
+        .option-field { display: flex; align-items: center; gap: 0.5rem; }
+        .option-field input[type="text"] { flex: 1; }
 
         .pill-group {
             display: inline-flex;
@@ -502,13 +403,8 @@
             color: var(--text-muted);
         }
 
-        .answer-input input[type="radio"] {
-            accent-color: var(--accent);
-        }
-
-        .answer-input input[type="text"] {
-            width: 100%;
-        }
+        .answer-input input[type="radio"] { accent-color: var(--accent); }
+        .answer-input input[type="text"] { width: 100%; }
 
         .result-box {
             margin-top: 0.75rem;
@@ -579,7 +475,11 @@
                         <span style="opacity:0.8;"> · {{ user.role }}</span>
                     </span>
                 </div>
-                <form method="post" action="/ui/logout">
+                <a href="/ui/account" class="btn btn-ghost">Кабинет</a>
+                {% if user.role == 'admin' %}
+                    <a href="/ui/admin/users" class="btn btn-primary">Админка</a>
+                {% endif %}
+                <form method="post" action="/ui/logout" style="margin-left:0.25rem;">
                     <button class="btn btn-ghost" type="submit">Выйти</button>
                 </form>
             {% else %}

@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Личный кабинет — OlyPrep{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title">Личный кабинет</div>
+        <div class="page-subtitle">
+            {% if user.role == 'admin' %}
+                Администратор: управление платформой и собственным аккаунтом.
+            {% elif user.role == 'teacher' %}
+                Учитель: изменение пароля и просмотр результатов учеников.
+            {% else %}
+                Ученик: смена пароля и просмотр своих тестов.
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid">
+    <section class="card">
+        <h2 style="font-size:1.1rem;">Профиль</h2>
+        <p class="muted" style="margin-top:0.4rem;">
+            Почта: <strong>{{ user.email }}</strong><br>
+            Роль: <strong>{{ user.role }}</strong>
+        </p>
+
+        <hr style="border:none; border-top:1px solid rgba(148,163,184,0.35); margin:1rem 0;">
+
+        <h2 style="font-size:1.0rem;">Смена пароля</h2>
+
+        {% if password_error %}
+            <div class="alert alert-error" style="margin-top:0.5rem;">{{ password_error }}</div>
+        {% endif %}
+        {% if password_success %}
+            <div class="alert alert-success" style="margin-top:0.5rem;">{{ password_success }}</div>
+        {% endif %}
+
+        <form method="post" action="/ui/account/change-password" class="form" style="margin-top:0.5rem;">
+            <div class="field">
+                <label class="field-label">Текущий пароль <span>*</span></label>
+                <input type="password" name="current_password" required>
+            </div>
+            <div class="field">
+                <label class="field-label">Новый пароль <span>*</span></label>
+                <input type="password" name="new_password" required>
+            </div>
+            <div class="field">
+                <label class="field-label">Повторите новый пароль <span>*</span></label>
+                <input type="password" name="new_password2" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="margin-top:0.3rem;">Обновить пароль</button>
+        </form>
+    </section>
+
+    <aside class="card">
+        <h2 style="font-size:1.05rem;">Роль и возможности</h2>
+        {% if user.role == 'admin' %}
+            <p class="muted" style="margin-top:0.5rem;">
+                Вы администратор. Через раздел <a href="/ui/admin/users">«Админка»</a> можно менять роли пользователей.
+                Также доступны все функции учителя и ученика.
+            </p>
+        {% elif user.role == 'teacher' %}
+            <p class="muted" style="margin-top:0.5rem;">
+                Вы учитель. Создавайте задания и тесты, а также следите за результатами учеников.
+            </p>
+        {% else %}
+            <p class="muted" style="margin-top:0.5rem;">
+                Вы ученик. Проходите тесты и смотрите историю своих попыток ниже.
+            </p>
+        {% endif %}
+    </aside>
+</div>
+
+{% if student_results %}
+<section class="card table-card" style="margin-top:1.5rem;">
+    <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">Мои попытки тестов</h2>
+    {% if student_results|length == 0 %}
+        <p class="muted">Вы ещё не проходили тесты.</p>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:60px;">#</th>
+                    <th>Тест</th>
+                    <th style="width:120px;">Баллы</th>
+                    <th style="width:160px;">Дата</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in student_results %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ r.test.title }}</td>
+                        <td>{{ r.submission.score }} / {{ r.max_points }}</td>
+                        <td>{{ r.submission.created_at }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if teacher_results %}
+<section class="card table-card" style="margin-top:1.5rem;">
+    <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">
+        Результаты учеников
+    </h2>
+    {% if teacher_results|length == 0 %}
+        <p class="muted">Пока нет попыток от учеников.</p>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:60px;">#</th>
+                    <th>Ученик</th>
+                    <th>Тест</th>
+                    <th style="width:120px;">Баллы</th>
+                    <th style="width:160px;">Дата</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in teacher_results %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>{{ r.student.email }}</td>
+                        <td>{{ r.test.title }}</td>
+                        <td>{{ r.submission.score }} / {{ r.max_points }}</td>
+                        <td>{{ r.submission.created_at }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="muted" style="margin-top:0.5rem;">
+            Сейчас показываются результаты всех учеников по всем тестам (MVP).
+        </p>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}
