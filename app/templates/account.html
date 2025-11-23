@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Личный кабинет — OlyPrep{% endblock %}
+{% block title %}Личный кабинет | OlyPrep{% endblock %}
+
 {% block content %}
 <div class="page-header">
     <div>
@@ -8,7 +9,7 @@
             {% if user.role == 'admin' %}
                 Администратор: управление платформой и собственным аккаунтом.
             {% elif user.role == 'teacher' %}
-                Учитель: изменение пароля и просмотр результатов учеников.
+                Преподаватель: работа с заданиями, тестами и результатами учеников.
             {% else %}
                 Ученик: смена пароля и просмотр своих тестов.
             {% endif %}
@@ -27,7 +28,6 @@
         <hr style="border:none; border-top:1px solid rgba(148,163,184,0.35); margin:1rem 0;">
 
         <h2 style="font-size:1.0rem;">Смена пароля</h2>
-
         {% if password_error %}
             <div class="alert alert-error" style="margin-top:0.5rem;">{{ password_error }}</div>
         {% endif %}
@@ -53,19 +53,19 @@
     </section>
 
     <aside class="card">
-        <h2 style="font-size:1.05rem;">??????? ????</h2>
+        <h2 style="font-size:1.05rem;">Рабочая зона</h2>
         {% if user.role in ['admin', 'teacher'] %}
             <ul class="muted" style="margin-top:0.75rem; list-style:none;">
-                <li style="margin-bottom:0.45rem;">? ??????? <a href="/ui/questions">?????????? ???????</a> ??? <a href="/ui/questions/new">???????? ?????</a>.</li>
-                <li style="margin-bottom:0.45rem;">? ????????? ???? ? <a href="/ui/tests">????????????</a> ? ?????? ????? ???????.</li>
-                <li style="margin-bottom:0.45rem;">? ???????? ????????? ?????????? ???????? ????? ?????? ???????? ? ??????? ????.</li>
+                <li style="margin-bottom:0.45rem;">• Открыть <a href="/ui/questions">библиотеку заданий</a> или <a href="/ui/questions/new">добавить новое</a>.</li>
+                <li style="margin-bottom:0.45rem;">• Составить тест в <a href="/ui/tests">конструкторе</a> и задать лимит попыток.</li>
+                <li style="margin-bottom:0.45rem;">• Смотреть детальные результаты учеников через кнопку «Детали» в таблице ниже.</li>
                 {% if user.role == 'admin' %}
-                <li style="margin-bottom:0.45rem;">? ?????? ???? ????????????? ? <a href="/ui/admin/users">???????</a>.</li>
+                <li style="margin-bottom:0.45rem;">• Менять роли пользователей в <a href="/ui/admin/users">админке</a>.</li>
                 {% endif %}
             </ul>
         {% else %}
             <p class="muted" style="margin-top:0.75rem;">
-                ????????? ????? ? ??????? ??????? ? ??????? ?? ?????? ????????? ????. ? ????????? ??????????? ??????? ?????? ????????????.
+                Проходите тесты в разделе «Тесты» и следите за своими попытками ниже.
             </p>
         {% endif %}
     </aside>
@@ -75,7 +75,7 @@
 <section class="card table-card" style="margin-top:1.5rem;">
     <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">Мои попытки тестов</h2>
     {% if student_results|length == 0 %}
-        <p class="muted">Вы ещё не проходили тесты.</p>
+        <p class="muted">Пока нет попыток.</p>
     {% else %}
         <table>
             <thead>
@@ -103,11 +103,9 @@
 
 {% if teacher_results %}
 <section class="card table-card" style="margin-top:1.5rem;">
-    <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">
-        Результаты учеников
-    </h2>
+    <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">Результаты учеников</h2>
     {% if teacher_results|length == 0 %}
-        <p class="muted">Пока нет попыток от учеников.</p>
+        <p class="muted">Пока нет попыток учеников.</p>
     {% else %}
         <table>
             <thead>
@@ -117,6 +115,7 @@
                     <th>Тест</th>
                     <th style="width:120px;">Баллы</th>
                     <th style="width:160px;">Дата</th>
+                    <th style="width:120px;"></th>
                 </tr>
             </thead>
             <tbody>
@@ -127,13 +126,11 @@
                         <td>{{ r.test.title }}</td>
                         <td>{{ r.submission.score }} / {{ r.max_points }}</td>
                         <td>{% if r.submission.started_at %}{{ r.submission.started_at.strftime("%d.%m.%Y %H:%M") }}{% else %}—{% endif %}</td>
+                        <td><a class="btn btn-sm" href="/ui/submissions/{{ r.submission.id }}">Детали</a></td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
-        <p class="muted" style="margin-top:0.5rem;">
-            Сейчас показываются результаты всех учеников по всем тестам (MVP).
-        </p>
     {% endif %}
 </section>
 {% endif %}
