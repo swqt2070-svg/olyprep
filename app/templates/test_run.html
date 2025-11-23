@@ -104,17 +104,6 @@
                         Завершить тест
                     </button>
                 </div>
-
-                <div class="test-run-question-nav">
-                    {% for i in range(total_questions) %}
-                        <button type="submit"
-                                class="btn btn-ghost {% if i == index %}btn-ghost-active{% endif %}"
-                                name="action"
-                                value="goto:{{ i }}">
-                            {{ i + 1 }}
-                        </button>
-                    {% endfor %}
-                </div>
             </div>
         </form>
     </div>

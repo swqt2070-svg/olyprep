@@ -262,6 +262,10 @@ async def run_test_get(
                     options.append(SimpleNamespace(id=idx, text=text))
         except Exception:
             options = []
+    if not options and hasattr(question, "option_items"):
+        for opt in getattr(question, "option_items") or []:
+            if opt and getattr(opt, "text", None):
+                options.append(SimpleNamespace(id=getattr(opt, "id", None), text=opt.text))
     if not options and hasattr(question, "answers") and question.answers:
         for opt in question.answers:
             text = getattr(opt, "text", None)
@@ -270,6 +274,11 @@ async def run_test_get(
 
     nav = _build_navigation(questions, answers_map, position)
     max_score = getattr(test, "max_score", None)
+    if max_score is None:
+        try:
+            max_score = sum((getattr(link, "points", 0) or 0) for link in getattr(test, "test_questions", []))
+        except Exception:
+            max_score = 0
 
     return templates.TemplateResponse(
         "test_run.html",
@@ -299,8 +308,9 @@ async def run_test_post(
     position: int,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
-    # поля формы
+    # ????? ? ?????
     answer_id: Optional[int] = Form(None),
+    selected_answer_id: Optional[int] = Form(None),
     answer_text: str = Form(""),
     action: str = Form("next"),
     goto: Optional[int] = Form(None),
@@ -328,6 +338,9 @@ async def run_test_post(
     if hasattr(question, "question") and not hasattr(question, "options"):
         if question.question is not None:
             question = question.question
+
+    if answer_id is None and selected_answer_id is not None:
+        answer_id = selected_answer_id
 
     # 1. Сохраняем ответ
     _save_answer_to_db(
