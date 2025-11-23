@@ -89,8 +89,8 @@ def build_account_context(
 
         tests: List[Test] = db.query(Test).all()
         tests_map = {t.id: t for t in tests}
-
         max_points_map: dict[int, int] = {}
+
         for t in tests:
             tqs = (
                 db.query(TestQuestion)
@@ -363,14 +363,97 @@ async def admin_set_role(
     )
 
 
-# ---------- IMPORT UI (ZIP с .md) ----------
+# ---------- IMPORT: ZIP с .md ----------
+
+def _try_parse_choice(
+    question_lines: List[str],
+    answer_line: str,
+) -> Optional[dict]:
+    """
+    Пытаемся выделить варианты вида "а) текст", "б) текст" и
+    понять, какой из них правильный по строке ответа.
+    """
+    opt_re = re.compile(r"^\s*([A-Za-zА-Яа-я])\)\s*(.+)")
+    options: List[str] = []
+    letter_to_index: dict[str, int] = {}
+    first_opt_idx: Optional[int] = None
+
+    for i, line in enumerate(question_lines):
+        m = opt_re.match(line)
+        if not m:
+            continue
+        letter = m.group(1).lower()
+        body = m.group(2).strip()
+        options.append(body)
+        letter_to_index[letter] = len(options) - 1
+        if first_opt_idx is None:
+            first_opt_idx = i
+
+    if len(options) < 2:
+        return None
+
+    # Ищем букву/текст в строке ответа
+    ans = answer_line.strip()
+    ans_letter: Optional[str] = None
+    ans_clean = ""
+
+    m_ans = opt_re.match(ans)
+    if m_ans:
+        ans_letter = m_ans.group(1).lower()
+        ans_clean = m_ans.group(2).strip(" .;").lower()
+    else:
+        m_letter_only = re.search(r"([A-Za-zА-Яа-я])\)", ans)
+        if m_letter_only:
+            ans_letter = m_letter_only.group(1).lower()
+            ans_clean = ans[m_letter_only.end() :].strip(" .;").lower()
+        else:
+            ans_clean = ans.strip(" .;").lower()
+
+    correct_index: Optional[int] = None
+
+    # Сначала пробуем по букве
+    if ans_letter and ans_letter in letter_to_index:
+        correct_index = letter_to_index[ans_letter]
+    else:
+        normalized_ans = ans_clean
+        for idx, opt in enumerate(options):
+            opt_norm = opt.strip(" .;").lower()
+            if opt_norm and opt_norm == normalized_ans:
+                correct_index = idx
+                break
+
+    if correct_index is None:
+        return None
+
+    # Текст вопроса — всё до первой строки с вариантом
+    if first_opt_idx is None:
+        first_opt_idx = 0
+    q_lines = question_lines[:first_opt_idx]
+    # обрезаем пустые
+    while q_lines and not q_lines[0].strip():
+        q_lines.pop(0)
+    while q_lines and not q_lines[-1].strip():
+        q_lines.pop()
+    question_text = "\n".join(q_lines).strip()
+    if not question_text:
+        # на всякий случай
+        question_text = "\n".join(question_lines).strip()
+
+    return {
+        "text": question_text,
+        "answer_type": "single",
+        "options_json": json.dumps(options, ensure_ascii=False),
+        "correct": str(correct_index),
+    }
 
 
 def parse_markdown_to_question(raw: str) -> Optional[dict]:
     """
-    1) Пытаемся вытащить текст между заголовками "# Вопрос" и "# Ответ".
-       Ответом считаем первую непустую строку после "# Ответ".
-    2) Если таких заголовков нет — fallback к старому формату "Ответ: ...".
+    Понимает два варианта:
+
+    1) где ответ в одной строке: "Ответ: ...";
+    2) структура с заголовками "# Вопрос" и "# Ответ", как в Obsidian:
+       текст вопроса + варианты, ниже блок "# Ответ" с правильным вариантом. :contentReference[oaicite:1]{index=1}
     """
     text = raw.replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
@@ -378,87 +461,78 @@ def parse_markdown_to_question(raw: str) -> Optional[dict]:
 
     lines = text.split("\n")
 
-    # --- 1. Формат с "# Вопрос" / "# Ответ" ---
+    # ===== Вариант 2: "# Вопрос" / "# Ответ" =====
     q_idx = None
     a_idx = None
     for i, line in enumerate(lines):
-        l = line.strip().lower()
-        if q_idx is None and (
-            l.startswith("# вопрос")
-            or l == "вопрос"
-            or l.startswith("## вопрос")
-        ):
+        stripped = line.strip()
+        heading = stripped.lstrip("#").strip()
+        if q_idx is None and re.match(r"^(Вопрос|Question)\b", heading, re.IGNORECASE):
             q_idx = i
-        elif q_idx is not None and a_idx is None and (
-            l.startswith("# ответ")
-            or l == "ответ"
-            or l.startswith("## ответ")
-        ):
+        elif a_idx is None and re.match(r"^(Ответ|Answer)\b", heading, re.IGNORECASE):
             a_idx = i
-            break
 
     if q_idx is not None and a_idx is not None and a_idx > q_idx:
         q_lines = lines[q_idx + 1 : a_idx]
-        a_lines = lines[a_idx + 1 :]
 
-        def strip_empty(lst: List[str]) -> List[str]:
-            start = 0
-            while start < len(lst) and not lst[start].strip():
-                start += 1
-            end = len(lst)
-            while end > start and not lst[end - 1].strip():
-                end -= 1
-            return lst[start:end]
+        # обрезаем пустые
+        while q_lines and not q_lines[0].strip():
+            q_lines.pop(0)
+        while q_lines and not q_lines[-1].strip():
+            q_lines.pop()
 
-        q_lines = strip_empty(q_lines)
-        a_lines = strip_empty(a_lines)
-
-        if not a_lines:
-            return None
-
-        answer_line = ""
-        for l in a_lines:
-            s = l.strip()
-            if s:
-                answer_line = s
+        # строка ответа — первая непустая после "# Ответ"
+        ans_line = ""
+        for j in range(a_idx + 1, len(lines)):
+            candidate = lines[j].strip()
+            if candidate:
+                ans_line = candidate
                 break
-        if not answer_line:
-            return None
 
-        question_text = "\n".join(q_lines).strip()
-        if not question_text:
-            question_text = text
+        if ans_line:
+            # пытаемся распарсить выбор одного варианта
+            choice = _try_parse_choice(q_lines, ans_line)
+            if choice:
+                return choice
 
+            # fallback: просто текстовый ответ
+            question_text = "\n".join(q_lines).strip() or text
+            return {
+                "text": question_text,
+                "answer_type": "text",
+                "options_json": None,
+                "correct": ans_line.strip(),
+            }
+
+    # ===== Вариант 1: "Ответ: ..." в одной строке =====
+    for idx, line in enumerate(lines):
+        m = re.search(r"(Ответ|Answer)\s*[:\-]\s*(.+)", line, re.IGNORECASE)
+        if not m:
+            continue
+        ans = m.group(2).strip()
+        if not ans:
+            continue
+
+        q_lines = lines[:idx]
+        while q_lines and not q_lines[0].strip():
+            q_lines.pop(0)
+        while q_lines and not q_lines[-1].strip():
+            q_lines.pop()
+
+        # тоже пробуем выделить варианты из тела вопроса
+        choice = _try_parse_choice(q_lines, ans)
+        if choice:
+            return choice
+
+        question_text = "\n".join(q_lines).strip() or text
         return {
             "text": question_text,
             "answer_type": "text",
-            "correct": answer_line,
             "options_json": None,
+            "correct": ans,
         }
 
-    # --- 2. Fallback: строка "Ответ: ..." в одной строке ---
-    answer_idx = None
-    answer_value = None
-    for idx, line in enumerate(lines):
-        m = re.search(r"(Ответ|Answer)\s*[:\-]\s*(.+)", line, re.IGNORECASE)
-        if m:
-            answer_idx = idx
-            answer_value = m.group(2).strip()
-            break
-
-    if answer_idx is None or not answer_value:
-        return None
-
-    question_text = "\n".join(lines[:answer_idx]).strip()
-    if not question_text:
-        question_text = text
-
-    return {
-        "text": question_text,
-        "answer_type": "text",
-        "correct": answer_value,
-        "options_json": None,
-    }
+    return None
 
 
 @router.get("/import", response_class=HTMLResponse)
@@ -485,15 +559,13 @@ async def import_submit(
     user: User = Depends(require_role("admin", "teacher")),
 ):
     filename = archive.filename or ""
-    filename_lower = filename.lower()
-
-    if not filename_lower.endswith(".zip"):
+    if not filename.lower().endswith(".zip"):
         return templates.TemplateResponse(
             "import.html",
             {
                 "request": request,
                 "user": user,
-                "error": "Ожидается .zip‑архив с .md файлами из Obsidian.",
+                "error": "Ожидается .zip‑архив с .md файлами.",
                 "summary": None,
             },
             status_code=400,
@@ -568,7 +640,7 @@ async def import_submit(
     )
 
 
-# ---------- QUESTIONS: список / создание / редактирование / удаление ----------
+# ---------- QUESTIONS: список / новая / редактор / удаление ----------
 
 
 @router.get("/questions", response_class=HTMLResponse)
@@ -618,6 +690,8 @@ async def question_new_submit(
 ):
     form = await request.form()
     error: Optional[str] = None
+
+    answer_type = answer_type.strip()
     raw_options: List[str] = []
 
     if answer_type not in ("text", "single"):
@@ -687,12 +761,16 @@ async def question_edit_page(
 
     options: List[str] = []
     selected_correct: Optional[int] = None
+    correct_text = ""
+
     if q.answer_type == "single":
         options = json.loads(q.options) if q.options else []
         try:
             selected_correct = int(q.correct)
         except Exception:
             selected_correct = None
+    else:
+        correct_text = q.correct or ""
 
     return templates.TemplateResponse(
         "question_edit.html",
@@ -702,6 +780,7 @@ async def question_edit_page(
             "question": q,
             "options": options,
             "selected_correct": selected_correct,
+            "correct_text": correct_text,
             "error": None,
             "success": None,
         },
@@ -727,6 +806,8 @@ async def question_edit_submit(
     error: Optional[str] = None
     success: Optional[str] = None
     raw_options: List[str] = []
+
+    answer_type = answer_type.strip()
 
     if answer_type not in ("text", "single"):
         error = "Неверный тип ответа."
@@ -761,12 +842,16 @@ async def question_edit_submit(
 
     options: List[str] = []
     selected_correct: Optional[int] = None
+    correct_text_val = ""
+
     if q.answer_type == "single":
         options = json.loads(q.options) if q.options else []
         try:
             selected_correct = int(q.correct)
         except Exception:
             selected_correct = None
+    else:
+        correct_text_val = q.correct or ""
 
     return templates.TemplateResponse(
         "question_edit.html",
@@ -776,6 +861,7 @@ async def question_edit_submit(
             "question": q,
             "options": options,
             "selected_correct": selected_correct,
+            "correct_text": correct_text_val,
             "error": error,
             "success": success,
         },
@@ -792,15 +878,7 @@ async def question_delete(
 ):
     q = db.get(Question, question_id)
     if not q:
-        raise HTTPException(status_code=404, detail="question not found")
-
-    usage_count = (
-        db.query(TestQuestion)
-        .filter(TestQuestion.question_id == question_id)
-        .count()
-    )
-
-    if usage_count > 0:
+        error = f"Вопрос #{question_id} не найден."
         rows: List[Question] = db.query(Question).order_by(Question.id.desc()).all()
         return templates.TemplateResponse(
             "questions_list.html",
@@ -808,15 +886,28 @@ async def question_delete(
                 "request": request,
                 "user": user,
                 "questions": rows,
-                "error": f"Нельзя удалить: вопрос используется в {usage_count} тест(ах).",
+                "error": error,
                 "success": None,
             },
             status_code=400,
         )
 
+    db.query(Answer).filter(Answer.question_id == question_id).delete()
+    db.query(TestQuestion).filter(TestQuestion.question_id == question_id).delete()
     db.delete(q)
     db.commit()
-    return redirect("/ui/questions")
+
+    rows: List[Question] = db.query(Question).order_by(Question.id.desc()).all()
+    return templates.TemplateResponse(
+        "questions_list.html",
+        {
+            "request": request,
+            "user": user,
+            "questions": rows,
+            "error": None,
+            "success": f"Вопрос #{question_id} удалён.",
+        },
+    )
 
 
 # ---------- TESTS UI ----------
@@ -962,10 +1053,10 @@ async def test_submit(
             continue
 
         field_name = f"answer_{q.id}"
-        given = form.get(field_name, "").strip()
         opts = json.loads(q.options) if q.options else None
         max_points += tq.points
 
+        given = form.get(field_name, "").strip()
         if not given:
             correct_flag = 0
             earned = 0
