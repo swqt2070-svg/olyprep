@@ -21,6 +21,7 @@ import json
 from app.deps import get_db, get_current_user, require_role, require_teacher_or_admin
 from app.models import User, Question, Test, TestQuestion, Submission, Answer
 from app.security import hash_password, verify_password, create_token
+from app.models import AnswerOption
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
@@ -245,10 +246,7 @@ async def logout():
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, user: User = Depends(get_current_user)):
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {"request": request, "user": user},
-    )
+    return redirect("/ui/account")
 
 
 # ---------- ЛИЧНЫЙ КАБИНЕТ ----------
