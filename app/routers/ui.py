@@ -742,17 +742,31 @@ async def questions_list(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    rows: List[Question] = db.query(Question).order_by(Question.id.desc()).all()
+    # забираем все вопросы
+    rows: List[Question] = db.query(Question).all()
+
+    # строим иерархию: Категория -> Класс -> Год -> Этап -> список вопросов
+    library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
+
+    for q in rows:
+        category = q.category or "Без категории"
+        grade = q.grade or 0
+        year = q.year or "—"
+        stage = q.stage or "—"
+
+        library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
+
     return templates.TemplateResponse(
         "questions_list.html",
         {
             "request": request,
             "user": user,
-            "questions": rows,
+            "library": library,
             "error": None,
             "success": None,
         },
     )
+
 
 
 @router.get("/questions/new", response_class=HTMLResponse)
