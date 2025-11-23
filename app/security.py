@@ -1,84 +1,151 @@
-# app/security.py
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
 
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
-from app.config import settings
+import bcrypt
 import jwt
-from passlib.hash import bcrypt
+from fastapi import HTTPException, status
 
-# ===== Простые настройки JWT (пока без app.config) =====
+from app.config import settings
 
-# ОБЯЗАТЕЛЬНО ПОТОМ ПОМЕНЯЙ НА НОРМАЛЬНЫЙ СЕКРЕТ и вынеси в .env
-JWT_SECRET = "super-secret-key-change-me"
-JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 дней
+# =========================
+# Настройки JWT
+# =========================
+
+JWT_SECRET_KEY: str = settings.jwt_secret_key
+JWT_ALGORITHM: str = settings.jwt_algorithm
+ACCESS_TOKEN_EXPIRE_MINUTES: int = settings.access_token_expire_minutes
 
 
-# ===== Хеширование пароля =====
+# =========================
+# Хэширование паролей
+# =========================
 
 def hash_password(password: str) -> str:
     """
-    Хеширование пароля через bcrypt.
-    bcrypt учитывает только первые 72 байта, поэтому режем строку.
+    Хэширует пароль через bcrypt.
     """
     if not isinstance(password, str):
-        password = str(password)
+        raise TypeError("password must be a string")
 
-    trimmed = password[:72]
-    return bcrypt.hash(trimmed)
+    password_bytes = password.encode("utf-8")
+    hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt())
+    # bcrypt возвращает bytes, сохраняем в БД как str
+    return hashed.decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """
-    Проверка пароля.
+    Проверка пароля против хэша.
     """
-    if not password or not password_hash:
+    if not password_hash:
         return False
 
-    trimmed = password[:72]
     try:
-        return bcrypt.verify(trimmed, password_hash)
-    except Exception:
+        return bcrypt.checkpw(
+            password.encode("utf-8"),
+            password_hash.encode("utf-8"),
+        )
+    except ValueError:
+        # Если хэш в БД кривой
         return False
 
 
-# ===== JWT‑токены =====
+# =========================
+# JWT‑токены
+# =========================
 
-def create_token(user_id: int, role: str) -> str:
+def create_token(
+    data: Dict[str, Any],
+    expires_delta: Optional[timedelta] = None,
+) -> str:
     """
-    Создаёт access‑token для пользователя.
-    В payload кладём id и role, чтобы потом доставать в deps.py.
+    Создаёт JWT‑токен.
+
+    Ожидается, что в data есть хотя бы:
+      - "id"    — id пользователя (int)
+      - "role"  — роль пользователя (str)
+      - "email" — почта (str)
+
+    Для совместимости:
+    - используем "id" как есть
+    - дублируем в стандартное поле "sub"
     """
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload: Dict[str, Any] = {
-        "sub": str(user_id),
-        "id": user_id,
-        "role": role,
-        "exp": expire,
-    }
-    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-    # В PyJWT>=2 encode уже возвращает str
-    return token
+    to_encode = data.copy()
+
+    user_id = to_encode.get("id")
+    if user_id is not None:
+        to_encode.setdefault("sub", str(user_id))
+
+    now = datetime.now(timezone.utc)
+
+    if expires_delta is None:
+        expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    expire = now + expires_delta
+    to_encode.update(
+        {
+            "iat": now,
+            "exp": expire,
+        }
+    )
+
+    encoded_jwt = jwt.encode(
+        to_encode,
+        JWT_SECRET_KEY,
+        algorithm=JWT_ALGORITHM,
+    )
+    return encoded_jwt
 
 
-def verify_token(token: str) -> Optional[Dict[str, Any]]:
+def verify_token(token: str) -> Dict[str, Any]:
     """
-    Декодирует токен. Если ок — возвращает payload (dict),
-    если нет — None.
+    Декодирует и валидирует JWT‑токен.
+
+    Возвращает payload, с которым уже работает deps.get_current_user:
+    используются data.get("id"), data.get("role"), data.get("email").
     """
     if not token:
-        return None
-
-    # Если токен приходит как "Bearer xxx"
-    if token.startswith("Bearer "):
-        token = token[len("Bearer "):].strip()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication token",
+        )
 
     try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(
+            token,
+            JWT_SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+        )
+
+        # Если в токене только sub — продублируем в id
+        if payload.get("id") is None and payload.get("sub") is not None:
+            try:
+                payload["id"] = int(payload["sub"])
+            except ValueError:
+                pass
+
         return payload
+
     except jwt.ExpiredSignatureError:
-        # токен просрочен
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+        )
     except jwt.InvalidTokenError:
-        # любая другая ошибка токена
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+        )
+
+
+# =========================
+# Совместимость с deps.py
+# =========================
+
+def decode_access_token(token: str) -> Dict[str, Any]:
+    """
+    Обёртка для совместимости со старым кодом.
+    deps.py импортирует decode_access_token — здесь просто
+    прокидываем в verify_token.
+    """
+    return verify_token(token)
