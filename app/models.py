@@ -56,20 +56,21 @@ class Question(Base):
     id: Mapped[int] = Column(Integer, primary_key=True, index=True)
     text: Mapped[str] = Column(Text, nullable=False)
 
-    # тип ответа
+    # ??? ??????
     answer_type: Mapped[str] = Column(
         Enum(AnswerType.SINGLE, AnswerType.MULTI, AnswerType.TEXT, name="answer_types"),
         nullable=False,
         default=AnswerType.SINGLE,
     )
 
-    # для текстовых задач – эталонный ответ (строка)
-    correct_answer_text: Mapped[Optional[str]] = Column(Text, nullable=True)
+    # ???????? (JSON ??? single/multi) ? ?????? ??????
+    options: Mapped[Optional[str]] = Column(Text, nullable=True)
+    correct: Mapped[Optional[str]] = Column(String, nullable=True)
 
-    # путь к картинке вопроса (если есть)
+    # ???? ? ???????? ??????? (???? ????)
     image_path: Mapped[Optional[str]] = Column(String, nullable=True)
 
-    # метаданные для "Библиотеки задач"
+    # ?????????? ??? "?????????? ?????"
     category: Mapped[Optional[str]] = Column(String, nullable=True, index=True)
     grade: Mapped[Optional[str]] = Column(String, nullable=True, index=True)
     year: Mapped[Optional[str]] = Column(String, nullable=True, index=True)
@@ -77,15 +78,15 @@ class Question(Base):
 
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
 
-    # варианты ответа (для single/multi)
-    options: Mapped[List["AnswerOption"]] = relationship(
+    # ???????? ?????? (??? single/multi)
+    option_items: Mapped[List["AnswerOption"]] = relationship(
         "AnswerOption",
         back_populates="question",
         cascade="all,delete-orphan",
         order_by="AnswerOption.id",
     )
 
-    # связи с тестами
+    # ????? ? ???????
     test_links: Mapped[List["TestQuestion"]] = relationship(
         "TestQuestion",
         back_populates="question",
@@ -94,9 +95,8 @@ class Question(Base):
 
     @property
     def answers(self) -> List["AnswerOption"]:
-        """Alias for options to satisfy legacy code paths."""
-        return self.options
-
+        """Alias for option items to satisfy legacy code paths."""
+        return self.option_items
 
 class AnswerOption(Base):
     __tablename__ = "answer_options"
@@ -112,7 +112,7 @@ class AnswerOption(Base):
     # картинка для варианта ответа (опционально)
     image_path: Mapped[Optional[str]] = Column(String, nullable=True)
 
-    question: Mapped[Question] = relationship("Question", back_populates="options")
+    question: Mapped[Question] = relationship("Question", back_populates="option_items")
 
 
 class Test(Base):
