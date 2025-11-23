@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Редактирование задачи — OlyPrep{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title">Редактирование задачи #{{ question.id }}</div>
+        <div class="page-subtitle">
+            Обновите текст задачи и правильные ответы. Изменения коснутся всех тестов, где задача используется.
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="/ui/questions" class="btn btn-ghost">К списку задач</a>
+    </div>
+</div>
+
+<section class="card">
+    {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+    {% if success %}
+        <div class="alert alert-success">{{ success }}</div>
+    {% endif %}
+
+    <form method="post" action="/ui/questions/{{ question.id }}/edit" class="form">
+        <div class="field">
+            <label class="field-label">Текст задачи <span>*</span></label>
+            <textarea name="text" required>{{ question.text }}</textarea>
+        </div>
+
+        <div class="field">
+            <label class="field-label">Тип ответа <span>*</span></label>
+            <select name="answer_type" id="answer_type" required>
+                <option value="text" {% if question.answer_type == 'text' %}selected{% endif %}>
+                    Написать текст
+                </option>
+                <option value="single" {% if question.answer_type == 'single' %}selected{% endif %}>
+                    Выбрать один
+                </option>
+                <option value="multi" {% if question.answer_type == 'multi' %}selected{% endif %}>
+                    Выбрать несколько
+                </option>
+            </select>
+        </div>
+
+        <!-- TEXT -->
+        <div id="block_text" class="field">
+            <label class="field-label">Правильный ответ (текст)</label>
+            <input type="text" name="correct_text" value="{{ correct_text }}">
+            <p class="muted">
+                Проверка — по строке (без учёта регистра и пробелов по краям).
+            </p>
+        </div>
+
+        <!-- SINGLE -->
+        <div id="block_single">
+            <div class="field">
+                <label class="field-label">Варианты ответа (один правильный)</label>
+                <div class="question-options-grid">
+                    {% for i in range(4) %}
+                    <div class="option-field">
+                        <input type="radio"
+                               name="correct_index"
+                               value="{{ i }}"
+                               {% if correct_index == i|string %}checked{% endif %}>
+                        <input type="text"
+                               name="option_{{ i }}"
+                               placeholder="Вариант {{ i + 1 }}"
+                               value="{% if options and options|length > i %}{{ options[i] }}{% endif %}">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- MULTI -->
+        <div id="block_multi">
+            <div class="field">
+                <label class="field-label">Варианты ответа (несколько правильных)</label>
+                <div class="question-options-grid">
+                    {% for i in range(4) %}
+                    <div class="option-field">
+                        <input type="checkbox"
+                               name="correct_multi"
+                               value="{{ i }}"
+                               {% if correct_multi_indices and i in correct_multi_indices %}checked{% endif %}>
+                        <input type="text"
+                               name="option_{{ i }}"
+                               placeholder="Вариант {{ i + 1 }}"
+                               value="{% if options and options|length > i %}{{ options[i] }}{% endif %}">
+                    </div>
+                    {% endfor %}
+                </div>
+                <p class="muted">
+                    Баллы начисляются только если выбран точный набор правильных вариантов.
+                </p>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top:0.6rem;">
+            Сохранить изменения
+        </button>
+    </form>
+</section>
+
+<script>
+    const selType = document.getElementById("answer_type");
+    const blockText = document.getElementById("block_text");
+    const blockSingle = document.getElementById("block_single");
+    const blockMulti = document.getElementById("block_multi");
+
+    function updateBlocks() {
+        const t = selType.value;
+        blockText.style.display = (t === "text") ? "block" : "none";
+        blockSingle.style.display = (t === "single") ? "block" : "none";
+        blockMulti.style.display = (t === "multi") ? "block" : "none";
+    }
+
+    selType.addEventListener("change", updateBlocks);
+    updateBlocks();
+</script>
+{% endblock %}
