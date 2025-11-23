@@ -1,97 +1,84 @@
 # app/security.py
-import datetime as dt
-from typing import Any, Dict, Optional
+
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any
 
 import jwt
-from fastapi import HTTPException, status
 from passlib.hash import bcrypt
 
-from app.config import settings
+# ===== Простые настройки JWT (пока без app.config) =====
+
+# ОБЯЗАТЕЛЬНО ПОТОМ ПОМЕНЯЙ НА НОРМАЛЬНЫЙ СЕКРЕТ и вынеси в .env
+JWT_SECRET = "super-secret-key-change-me"
+JWT_ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 дней
 
 
-# ------------------------
-# Хэширование паролей
-# ------------------------
-def _truncate_password(password: str) -> str:
-    """
-    Passlib (bcrypt) не принимает пароль > 72 байт.
-    Самый простой способ — обрезать строку до 72 символов.
-    """
-    if password is None:
-        return ""
-    if len(password) > 72:
-        return password[:72]
-    return password
-
+# ===== Хеширование пароля =====
 
 def hash_password(password: str) -> str:
     """
-    Вернёт хэш пароля для хранения в БД.
+    Хеширование пароля через bcrypt.
+    bcrypt учитывает только первые 72 байта, поэтому режем строку.
     """
-    pwd = _truncate_password(password)
-    return bcrypt.hash(pwd)
+    if not isinstance(password, str):
+        password = str(password)
+
+    trimmed = password[:72]
+    return bcrypt.hash(trimmed)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """
-    Проверка пароля при логине.
+    Проверка пароля.
     """
-    pwd = _truncate_password(password)
+    if not password or not password_hash:
+        return False
+
+    trimmed = password[:72]
     try:
-        return bcrypt.verify(pwd, password_hash)
-    except ValueError:
-        # Если хэш битый / несовместим — просто не пускаем
+        return bcrypt.verify(trimmed, password_hash)
+    except Exception:
         return False
 
 
-# ------------------------
-# JWT токены
-# ------------------------
-def create_token(
-    data: Dict[str, Any],
-    expires_delta: Optional[dt.timedelta] = None,
-) -> str:
+# ===== JWT‑токены =====
+
+def create_token(user_id: int, role: str) -> str:
     """
-    Создание access-токена (JWT).
-    В payload ОБЯЗАТЕЛЬНО передаём хотя бы id пользователя, email и role.
+    Создаёт access‑token для пользователя.
+    В payload кладём id и role, чтобы потом доставать в deps.py.
     """
-    to_encode = data.copy()
-
-    if expires_delta is None:
-        expires_delta = dt.timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-
-    expire = dt.datetime.utcnow() + expires_delta
-    to_encode["exp"] = expire
-
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM,
-    )
-    return encoded_jwt
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload: Dict[str, Any] = {
+        "sub": str(user_id),
+        "id": user_id,
+        "role": role,
+        "exp": expire,
+    }
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    # В PyJWT>=2 encode уже возвращает str
+    return token
 
 
-def verify_token(token: str) -> Dict[str, Any]:
+def verify_token(token: str) -> Optional[Dict[str, Any]]:
     """
-    Декодирование токена. Возвращает payload, если всё ок.
-    Бросает HTTPException(401), если токен просрочен или битый.
+    Декодирует токен. Если ок — возвращает payload (dict),
+    если нет — None.
     """
+    if not token:
+        return None
+
+    # Если токен приходит как "Bearer xxx"
+    if token.startswith("Bearer "):
+        token = token[len("Bearer "):].strip()
+
     try:
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
-        )
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Токен истёк. Войдите заново.",
-        )
+        # токен просрочен
+        return None
     except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Невалидный токен.",
-        )
+        # любая другая ошибка токена
+        return None
