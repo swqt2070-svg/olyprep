@@ -243,3 +243,11 @@ class TestAttemptAnswer(Base):
     attempt = relationship("TestAttempt", back_populates="answers")
     question = relationship("Question")
     answer = relationship("Answer")
+
+
+# ---------------- ОБРАТНАЯ СОВМЕСТИМОСТЬ ----------------
+# Старый код в некоторых роутерах (например, users.py)
+# всё ещё импортирует Submission. Делаем алиас,
+# чтобы ничего не падало.
+
+Submission = TestAttempt
