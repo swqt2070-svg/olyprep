@@ -27,4 +27,4 @@ app.include_router(ui.router)  # ← ДОБАВЛЕНО
 
 @app.get("/")
 def root():
-    return {"status": "ok", "version": "3.2 TESTER UI"}
+    return {"status": "ok", "version": "3.3 TESTER UI"}

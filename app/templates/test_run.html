@@ -3,262 +3,388 @@
 {% block title %}Прохождение теста{% endblock %}
 
 {% block content %}
-<div class="page-inner page-test-run">
-    <h1 class="page-title">Проверка темы</h1>
+<style>
+    .test-layout {
+        max-width: 960px;
+        margin: 0 auto;
+    }
 
-    <div class="card card-test-run">
-        <form method="post">
-            {# служебные поля для бекенда #}
-            <input type="hidden" name="question_id" value="{{ question.id }}">
-            <input type="hidden" name="index" value="{{ index }}">
-            <input type="hidden" name="nav_action" id="nav_action" value="stay">
+    .test-card {
+        margin-top: 2rem;
+        padding: 1.5rem 2rem;
+        background: rgba(12, 17, 28, 0.9);
+        border-radius: 16px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+    }
 
-            <div class="test-run-header">
-                <div class="test-run-header-left">
-                    <div class="test-run-caption">
-                        Вопрос {{ index + 1 }} из {{ total_questions }}
-                    </div>
-                    <div class="test-run-caption">
-                        Максимальный балл: {{ max_points }}
-                    </div>
-                </div>
-                <div class="test-run-header-right">
-                    <div class="test-run-test-title">
-                        {{ test.title }}
-                    </div>
-                </div>
-            </div>
+    .test-header-line {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        font-size: 0.95rem;
+        opacity: 0.85;
+        margin-bottom: 1rem;
+    }
 
-            <div class="test-run-body">
-                <div class="field">
-                    <label class="field-label">Текст задачи</label>
-                    <div class="question-text">
-                        {{ question.text | replace('\n', '<br>') | safe }}
-                    </div>
-                </div>
+    .test-question-text {
+        width: 100%;
+        min-height: 130px;
+        padding: 0.75rem 0.9rem;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(15, 23, 42, 0.92);
+        color: inherit;
+        resize: vertical;
+        font-family: inherit;
+        font-size: 0.95rem;
+        line-height: 1.4;
+        white-space: pre-wrap;
+    }
 
-                {# варианты / текстовый ответ #}
-                {% set answers = question.answers | default([]) %}
-                {% set has_options = answers|length > 0 %}
+    .test-section-title {
+        margin-top: 1.2rem;
+        font-size: 0.9rem;
+        opacity: 0.8;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
 
-                {% if has_options %}
-                    {# считаем, сколько правильных вариантов, чтобы понять «один» или «несколько» #}
-                    {% set correct_count = answers | selectattr('is_correct') | list | length %}
-                    {% set is_multiple = correct_count > 1 %}
+    .question-options {
+        margin-top: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
 
-                    <div class="field">
-                        <label class="field-label">
-                            {% if is_multiple %}
-                                Выберите один или несколько вариантов
-                            {% else %}
-                                Выберите один вариант
-                            {% endif %}
+    .option-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.4rem 0.6rem;
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid transparent;
+    }
+
+    .option-row:hover {
+        border-color: rgba(129, 140, 248, 0.6);
+        background: rgba(15, 23, 42, 0.95);
+    }
+
+    .option-row input[type="radio"],
+    .option-row input[type="checkbox"] {
+        flex-shrink: 0;
+    }
+
+    .option-text {
+        flex: 1;
+        font-size: 0.95rem;
+        line-height: 1.3;
+        word-break: break-word;
+    }
+
+    .test-nav {
+        margin-top: 1.8rem;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .test-nav-buttons-main {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .test-nav-indexes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-left: auto;
+    }
+
+    .btn {
+        border-radius: 999px;
+        padding: 0.45rem 1.1rem;
+        border: none;
+        cursor: pointer;
+        font: inherit;
+    }
+
+    .btn-ghost {
+        background: rgba(15, 23, 42, 0.9);
+        color: inherit;
+        border: 1px solid rgba(148, 163, 184, 0.6);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+        background: rgba(30, 64, 175, 0.6);
+        border-color: rgba(129, 140, 248, 0.9);
+    }
+
+    .btn-ghost:disabled {
+        opacity: 0.4;
+        cursor: default;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: #f9fafb;
+        box-shadow: 0 12px 30px rgba(79, 70, 229, 0.55);
+    }
+
+    .btn-primary:hover {
+        filter: brightness(1.05);
+    }
+
+    .btn-index {
+        min-width: 2.1rem;
+        height: 2.1rem;
+        padding: 0;
+        text-align: center;
+        font-size: 0.85rem;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        background: rgba(15, 23, 42, 0.95);
+        color: inherit;
+        cursor: pointer;
+    }
+
+    .btn-index-current {
+        border-color: rgba(129, 140, 248, 0.95);
+        background: radial-gradient(circle at 30% 0%, #818cf8, #4f46e5);
+        color: #f9fafb;
+        box-shadow: 0 0 0 1px rgba(129, 140, 248, 0.7),
+                    0 10px 24px rgba(55, 65, 194, 0.7);
+    }
+
+    .btn-index-answered {
+        border-color: rgba(52, 211, 153, 0.9);
+    }
+
+    @media (max-width: 768px) {
+        .test-card {
+            padding: 1.25rem 1.1rem;
+            border-radius: 12px;
+        }
+        .test-nav {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .test-nav-indexes {
+            margin-left: 0;
+        }
+    }
+</style>
+
+<div class="test-layout">
+    <div class="test-card">
+
+        {# --- выбираем объект вопроса --- #}
+        {% set q = None %}
+        {% if question is defined and question is not none %}
+            {% set q = question %}
+        {% elif current_question is defined and current_question is not none %}
+            {% set q = current_question %}
+        {% elif item is defined and item.question is defined and item.question is not none %}
+            {% set q = item.question %}
+        {% endif %}
+
+        {# индекс вопроса (0-based), без использования undefined index #}
+        {% set idx = 0 %}
+        {% if question_index is defined %}
+            {% set idx = question_index %}
+        {% elif current_index is defined %}
+            {% set idx = current_index %}
+        {% elif position is defined %}
+            {% set idx = position %}
+        {% endif %}
+
+        {# всего вопросов #}
+        {% set total = 1 %}
+        {% if total_questions is defined %}
+            {% set total = total_questions %}
+        {% elif questions_total is defined %}
+            {% set total = questions_total %}
+        {% elif questions_count is defined %}
+            {% set total = questions_count %}
+        {% elif attempt is defined and attempt.total_questions is not none %}
+            {% set total = attempt.total_questions %}
+        {% elif questions is defined %}
+            {% set total = questions|length %}
+        {% endif %}
+
+        {% set display_index = idx + 1 %}
+
+        <h1 style="font-size: 1.4rem; margin-bottom: 0.75rem;">
+            {{ test_title|default(test.title)|default("Прохождение теста") }}
+        </h1>
+
+        <div class="test-header-line">
+            <span>Вопрос {{ display_index }} из {{ total }}</span>
+            {% if max_score_for_question is defined %}
+                <span>Максимальный балл: {{ max_score_for_question }}</span>
+            {% elif question_score is defined %}
+                <span>Максимальный балл: {{ question_score }}</span>
+            {% endif %}
+        </div>
+
+        <div class="test-section-title">Текст задачи</div>
+        <div class="test-question-text">
+            {% if question_text is defined %}
+                {{ question_text }}
+            {% elif q is not none and q.text is defined %}
+                {{ q.text }}
+            {% else %}
+                Текст задачи не передан.
+            {% endif %}
+        </div>
+
+        {# --- подготовка списков вариантов / текущего ответа --- #}
+        {% set options_list = [] %}
+        {% if options is defined and options %}
+            {% set options_list = options %}
+        {% elif q is not none and q.answers is defined and q.answers %}
+            {% set options_list = q.answers %}
+        {% elif q is not none and q.options is defined and q.options %}
+            {% set options_list = q.options %}
+        {% elif answers is defined and answers %}
+            {% set options_list = answers %}
+        {% endif %}
+
+        {% set current_answer_id = None %}
+        {% if selected_answer_id is defined and selected_answer_id is not none %}
+            {% set current_answer_id = selected_answer_id %}
+        {% elif answer_id is defined and answer_id is not none %}
+            {% set current_answer_id = answer_id %}
+        {% elif user_answer_id is defined and user_answer_id is not none %}
+            {% set current_answer_id = user_answer_id %}
+        {% endif %}
+
+        {% set current_answer_text = "" %}
+        {% if answer_text is defined and answer_text %}
+            {% set current_answer_text = answer_text %}
+        {% elif user_answer_text is defined and user_answer_text %}
+            {% set current_answer_text = user_answer_text %}
+        {% endif %}
+
+        <form id="test-form" method="post" style="margin-top: 1.25rem;">
+
+            {# скрытые поля, чтобы бэкенд знал, что за вопрос #}
+            {% if q is not none and q.id is defined %}
+                <input type="hidden" name="question_id" value="{{ q.id }}">
+            {% endif %}
+            <input type="hidden" name="question_index" value="{{ idx }}">
+            {# универсальное поле для ответа — сюда JS скопирует выбранный вариант/текст #}
+            <input type="hidden" name="answer" value="">
+
+            {% if options_list and options_list|length > 0 %}
+                <div class="test-section-title">Выберите один вариант</div>
+                <div class="question-options">
+                    {% for opt in options_list %}
+                        {% set checked = false %}
+                        {% if current_answer_id is not none and (current_answer_id|string == opt.id|string or current_answer_id|string == loop.index|string) %}
+                            {% set checked = true %}
+                        {% endif %}
+                        <label class="option-row">
+                            <input
+                                type="radio"
+                                name="answer_id"
+                                value="{{ opt.id }}"
+                                {% if checked %}checked{% endif %}
+                            >
+                            <span class="option-text">
+                                {{ opt.text|default(opt.content)|default("Без текста") }}
+                            </span>
                         </label>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="test-section-title">Введите ответ</div>
+                <textarea
+                    name="answer_text"
+                    rows="3"
+                    style="width: 100%; margin-top: 0.5rem; padding: 0.6rem 0.8rem; border-radius: 10px; border: 1px solid rgba(148,163,184,0.6); background: rgba(15,23,42,0.9); color: inherit; resize: vertical; font-family: inherit; font-size: 0.95rem;"
+                >{{ current_answer_text }}</textarea>
+            {% endif %}
 
-                        <div class="answers-list">
-                            {% set selected_ids = selected_answer_ids | default([]) %}
-                            {% set selected_id = selected_answer_id | default(None) %}
-
-                            {% for opt in answers %}
-                                <label class="answer-option">
-                                    <input
-                                        type="{{ 'checkbox' if is_multiple else 'radio' }}"
-                                        name="{{ 'selected_answer_ids' if is_multiple else 'selected_answer_id' }}"
-                                        value="{{ opt.id }}"
-                                        {% if (not is_multiple and selected_id == opt.id)
-                                              or (is_multiple and opt.id in selected_ids) %}
-                                            checked
-                                        {% endif %}
-                                    >
-                                    <span class="answer-option-text">{{ opt.text }}</span>
-                                </label>
-                            {% endfor %}
-                        </div>
-                    </div>
-                {% else %}
-                    <div class="field">
-                        <label class="field-label" for="answer_text">Напишите ответ</label>
-                        <textarea id="answer_text"
-                                  name="answer_text"
-                                  rows="5"
-                                  class="field-textarea">{{ answer_text | default('') }}</textarea>
-                    </div>
-                {% endif %}
-            </div>
-
-            <div class="test-run-footer">
-                <div class="test-run-nav">
-                    <button type="submit"
-                            class="btn btn-secondary"
-                            onclick="document.getElementById('nav_action').value='prev';">
+            <div class="test-nav">
+                <div class="test-nav-buttons-main">
+                    <button
+                        type="submit"
+                        name="action"
+                        value="prev"
+                        class="btn btn-ghost"
+                        {% if display_index <= 1 %}disabled{% endif %}
+                    >
                         ← Предыдущий
                     </button>
-
-                    <button type="submit"
-                            class="btn btn-secondary"
-                            onclick="document.getElementById('nav_action').value='next';">
+                    <button
+                        type="submit"
+                        name="action"
+                        value="next"
+                        class="btn btn-ghost"
+                    >
                         Следующий →
                     </button>
-
-                    <button type="submit"
-                            class="btn btn-primary"
-                            onclick="document.getElementById('nav_action').value='finish';">
+                    <button
+                        type="submit"
+                        name="action"
+                        value="finish"
+                        class="btn btn-primary"
+                    >
                         Завершить тест
                     </button>
                 </div>
 
-                <div class="test-run-question-nav">
-                    {% for i in range(total_questions) %}
-                        <button type="submit"
-                                class="btn btn-ghost {% if i == index %}btn-ghost-active{% endif %}"
-                                onclick="document.getElementById('nav_action').value='goto:{{ i }}';">
-                            {{ i + 1 }}
-                        </button>
-                    {% endfor %}
-                </div>
+                {% set answered = answered_map if answered_map is defined else None %}
+
+                {% if total > 1 %}
+                    <div class="test-nav-indexes">
+                        {% for i in range(1, total + 1) %}
+                            {% set cls = "btn-index" %}
+                            {% if i == display_index %}
+                                {% set cls = cls + " btn-index-current" %}
+                            {% elif answered is not none and answered.get(i) %}
+                                {% set cls = cls + " btn-index-answered" %}
+                            {% endif %}
+                            <button
+                                type="submit"
+                                name="jump_to"
+                                value="{{ i }}"
+                                class="{{ cls }}"
+                            >
+                                {{ i }}
+                            </button>
+                        {% endfor %}
+                    </div>
+                {% endif %}
             </div>
         </form>
     </div>
 </div>
-{% endblock %}
 
-{% block extra_styles %}
-<style>
-    .page-test-run .card-test-run {
-        max-width: 960px;
-        margin: 0 auto;
-        padding: 24px 32px;
-    }
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("test-form");
+    if (!form) return;
+    const hiddenAnswer = form.querySelector('input[name="answer"]');
 
-    .page-test-run .test-run-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        gap: 16px;
-        margin-bottom: 24px;
-    }
-
-    .page-test-run .test-run-caption {
-        font-size: 14px;
-        color: #aeb4c5;
-        margin-bottom: 4px;
-    }
-
-    .page-test-run .test-run-test-title {
-        font-size: 16px;
-        font-weight: 500;
-        text-align: right;
-    }
-
-    .page-test-run .field {
-        margin-bottom: 20px;
-    }
-
-    .page-test-run .field-label {
-        display: block;
-        font-size: 14px;
-        margin-bottom: 6px;
-        color: #aeb4c5;
-    }
-
-    .page-test-run .question-text {
-        padding: 12px 14px;
-        border-radius: 8px;
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        font-size: 15px;
-        line-height: 1.45;
-        white-space: pre-wrap;
-    }
-
-    .page-test-run .field-textarea {
-        width: 100%;
-        min-height: 140px;
-        resize: vertical;
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(7, 11, 25, 0.9);
-        padding: 10px 12px;
-        color: #ffffff;
-        font-size: 14px;
-        line-height: 1.45;
-    }
-
-    .page-test-run .field-textarea:focus {
-        outline: none;
-        border-color: #7c6bff;
-        box-shadow: 0 0 0 1px rgba(124, 107, 255, 0.5);
-    }
-
-    .page-test-run .answers-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        margin-top: 6px;
-    }
-
-    .page-test-run .answer-option {
-        display: flex;
-        align-items: flex-start;
-        gap: 8px;
-        padding: 8px 10px;
-        border-radius: 8px;
-        background: rgba(255,255,255,0.02);
-        border: 1px solid transparent;
-    }
-
-    .page-test-run .answer-option input {
-        margin-top: 3px;
-    }
-
-    .page-test-run .answer-option-text {
-        font-size: 14px;
-        line-height: 1.4;
-    }
-
-    .page-test-run .answer-option:hover {
-        border-color: rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.03);
-    }
-
-    .page-test-run .test-run-footer {
-        margin-top: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-
-    .page-test-run .test-run-nav {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        align-items: center;
-    }
-
-    .page-test-run .test-run-question-nav {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
-    .page-test-run .btn-ghost-active {
-        border-color: rgba(255,255,255,0.7);
-        background: rgba(255,255,255,0.08);
-    }
-
-    @media (max-width: 768px) {
-        .page-test-run .card-test-run {
-            padding: 20px 16px;
+    form.addEventListener("submit", function () {
+        if (!hiddenAnswer) return;
+        let value = "";
+        const checkedRadio = form.querySelector('input[name="answer_id"]:checked');
+        if (checkedRadio) {
+            value = checkedRadio.value;
+        } else {
+            const textField = form.querySelector('textarea[name="answer_text"]');
+            if (textField) {
+                value = textField.value || "";
+            }
         }
-
-        .page-test-run .test-run-header {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .page-test-run .test-run-test-title {
-            text-align: left;
-        }
-    }
-</style>
+        hiddenAnswer.value = value;
+    });
+});
+</script>
 {% endblock %}
