@@ -1,11 +1,19 @@
-from fastapi import Depends, HTTPException, Request
+from __future__ import annotations
+
+from typing import Generator, Optional
+
+from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
+
 from app.database import SessionLocal
 from app.models import User
-from app.security import SECRET_KEY
-import jwt
+from app.security import decode_token
 
 
-def get_db():
+# ---------- DB SESSION ----------
+
+
+def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
@@ -13,44 +21,99 @@ def get_db():
         db.close()
 
 
-def get_current_user(request: Request, db=Depends(get_db)) -> User:
+# ---------- AUTH HELPERS ----------
+
+
+def _extract_token(request: Request) -> Optional[str]:
     """
-    Достаём JWT токен из куки access_token и по нему загружаем пользователя.
+    Достаём access_token:
+    1) из cookie `access_token`
+    2) если нет — из Authorization: Bearer <token>
     """
-    token = request.cookies.get("access_token", "")
+    token = request.cookies.get("access_token")
+    if token:
+        return token
+
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header[7:]
+
+    return None
+
+
+def get_current_user(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> User:
+    token = _extract_token(request)
     if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Не авторизован",
+        )
 
     try:
-        data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        data = decode_token(token)
     except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Невалидный токен",
+        )
 
-    user = db.get(User, data.get("id"))
+    user_id = data.get("id")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Невалидный токен (нет id пользователя)",
+        )
+
+    user = db.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Пользователь не найден",
+        )
 
     return user
 
 
-def require_role(*roles: str):
-    """
-    Универсальная проверка ролей.
-    Пример:
-      user: User = Depends(require_role("admin", "teacher"))
-    """
-    def dependency(user: User = Depends(get_current_user)):
-        if roles and user.role not in roles:
-            raise HTTPException(status_code=403, detail="Forbidden")
-        return user
-
-    return dependency
+# ---------- ROLE GUARDS ----------
 
 
-def require_teacher_or_admin(user: User = Depends(get_current_user)):
+def require_active_user(user: User = Depends(get_current_user)) -> User:
     """
-    Шорткат: разрешаем только admin и teacher.
+    Просто требует валидного залогиненного пользователя.
+    Используем там, где не важна конкретная роль.
     """
-    if user.role not in ("admin", "teacher"):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Требуется роль admin",
+        )
+    return user
+
+
+def require_teacher_or_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role not in ("teacher", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Требуется роль teacher или admin",
+        )
+    return user
+
+
+def require_student(user: User = Depends(get_current_user)) -> User:
+    """
+    Гард для учеников (для прохождения тестов и т.п.).
+    Именно этой функции не хватало, из‑за чего падал импорт.
+    """
+    if user.role != "student":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Требуется роль student",
+        )
     return user
