@@ -22,6 +22,7 @@ from app.deps import get_db, get_current_user, require_role, require_teacher_or_
 from app.models import User, Question, Test, TestQuestion, Submission, Answer
 from app.security import hash_password, verify_password, create_token
 from app.models import AnswerOption
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
@@ -1564,6 +1565,7 @@ async def submission_detail(
     test = db.get(Test, sub.test_id)
     if not test:
         raise HTTPException(status_code=404, detail="test not found")
+    student = db.get(User, sub.user_id) if hasattr(sub, "user_id") else None
 
     tqs: List[TestQuestion] = (
         db.query(TestQuestion)
@@ -1573,8 +1575,8 @@ async def submission_detail(
     )
     answers_map: dict[int, Answer] = {a.question_id: a for a in getattr(sub, "answers", [])}
 
-    rows = []
-    total_score = sub.score or 0
+    rows: List[dict] = []
+    total_score = 0
     max_total = 0
     for idx, link in enumerate(tqs, 1):
         q = link.question or db.get(Question, link.question_id)
@@ -1582,14 +1584,21 @@ async def submission_detail(
             if q.question is not None:
                 q = q.question
         max_total += getattr(link, "points", 0) or 0
+
         ans = answers_map.get(q.id)
         given_raw = ""
         if ans:
             given_raw = getattr(ans, "answer_text", "") or getattr(ans, "given", "") or ""
         your_answer = given_raw or "—"
         correct_answer = ""
+        recomputed_points = 0
+
         if q.answer_type == "text":
             correct_answer = (q.correct or "") if hasattr(q, "correct") else ""
+            gt = (q.correct or "").strip().lower() if hasattr(q, "correct") else ""
+            uv = (given_raw or "").strip().lower()
+            if gt and uv and gt == uv:
+                recomputed_points = getattr(link, "points", 0) or 0
         else:
             opts = []
             if q.options:
@@ -1611,14 +1620,24 @@ async def submission_detail(
                 correct_answer = str(q.correct or "")
             if user_idx is not None and opts and 0 <= user_idx < len(opts):
                 your_answer = str(opts[user_idx])
+            if correct_idx is not None and user_idx is not None and correct_idx == user_idx:
+                recomputed_points = getattr(link, "points", 0) or 0
+
+        display_points = getattr(ans, "points", None) if ans else None
+        if display_points is None:
+            display_points = recomputed_points
+        total_score += display_points or 0
+
         rows.append(
             {
                 "index": idx,
                 "question": q,
                 "your_answer": your_answer,
                 "correct_answer": correct_answer,
-                "score": getattr(ans, "points", 0) if ans else 0,
+                "score": display_points or 0,
                 "max_points": getattr(link, "points", 0) or 0,
+                "question_id": q.id,
+                "answer_id": getattr(ans, "id", None) if ans else None,
             }
         )
 
@@ -1628,8 +1647,47 @@ async def submission_detail(
             "request": request,
             "user": user,
             "test": test,
+            "submission": sub,
+            "student": student,
             "rows": rows,
             "total_score": total_score,
             "max_total": max_total,
+            "can_edit": True,
         },
     )
+
+
+@router.post("/submissions/{submission_id}/set-points")
+async def submission_set_points(
+    submission_id: int,
+    question_id: int = Form(...),
+    points: int = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    sub = db.get(Submission, submission_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="submission not found")
+
+    ans = (
+        db.query(Answer)
+        .filter(Answer.submission_id == submission_id, Answer.question_id == question_id)
+        .first()
+    )
+    if not ans:
+        raise HTTPException(status_code=404, detail="answer not found")
+
+    ans.points = max(points, 0)
+    db.add(ans)
+
+    new_score = (
+        db.query(Answer)
+        .filter(Answer.submission_id == submission_id)
+        .with_entities(Answer.points)
+        .all()
+    )
+    sub.score = sum(p[0] or 0 for p in new_score)
+    db.add(sub)
+    db.commit()
+
+    return RedirectResponse(url=f"/ui/submissions/{submission_id}", status_code=303)

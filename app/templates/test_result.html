@@ -11,6 +11,10 @@
             <div class="result-score">
                 Итоговый балл: <strong>{{ total_score }} / {{ max_total }}</strong>
             </div>
+            <div class="result-meta">
+                {% if submission %}Попытка #{{ submission.id }}{% endif %}
+                {% if student %} · Ученик: {{ student.email }} (id: {{ student.id }}){% endif %}
+            </div>
         </div>
     </div>
 
@@ -26,6 +30,7 @@
                         <th>Ваш ответ</th>
                         <th>Правильный ответ</th>
                         <th>Баллы</th>
+                        {% if can_edit %}<th style="width: 160px;">Правка</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -38,6 +43,15 @@
                             <td class="col-answer">{{ row.your_answer }}</td>
                             <td class="col-answer">{{ row.correct_answer }}</td>
                             <td>{{ row.score }} / {{ row.max_points }}</td>
+                            {% if can_edit %}
+                            <td>
+                                <form method="post" action="/ui/submissions/{{ submission.id }}/set-points" class="inline-form">
+                                    <input type="hidden" name="question_id" value="{{ row.question_id }}">
+                                    <input type="number" name="points" min="0" step="1" value="{{ row.score }}" class="points-input">
+                                    <button class="btn btn-sm" type="submit">Сохранить</button>
+                                </form>
+                            </td>
+                            {% endif %}
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -58,6 +72,12 @@
 
     .page-test-result .result-score {
         font-size: 18px;
+    }
+
+    .page-test-result .result-meta {
+        margin-top: 6px;
+        color: #aeb4c5;
+        font-size: 13px;
     }
 
     .page-test-result .table-wrapper {
@@ -91,6 +111,22 @@
 
     .page-test-result .col-answer {
         min-width: 160px;
+    }
+
+    .points-input {
+        width: 70px;
+        padding: 4px 6px;
+        margin-right: 6px;
+        border-radius: 6px;
+        border: 1px solid rgba(148,163,184,0.35);
+        background: rgba(15,23,42,0.6);
+        color: #e5e7eb;
+    }
+
+    .inline-form {
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
 </style>
 {% endblock %}
