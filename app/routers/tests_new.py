@@ -1,287 +1,347 @@
-from __future__ import annotations
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
 
-import json
-from typing import Dict, Any, List
-
-from fastapi import APIRouter, Depends, Request, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+)
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.deps import require_student
-from app.models import Test, TestQuestion, Question, Answer
+from app.deps import get_db, require_student
+from app.models import (
+    Test,
+    Question,
+    Answer,
+    TestAttempt,
+    TestAttemptAnswer,
+)
 
-router = APIRouter(prefix="/ui/tests", tags=["Tests UI wizard"])
 templates = Jinja2Templates(directory="app/templates")
 
+router = APIRouter(
+    prefix="/ui/tests",
+    tags=["ui-tests"],
+)
 
-def _load_test_questions(db: Session, test_id: int) -> tuple[Test, List[TestQuestion]]:
-    """Загрузить тест и связанные вопросы с вариантами."""
-    test = db.query(Test).filter(Test.id == test_id).first()
+
+# ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ----------
+
+
+def _get_test_or_404(db: Session, test_id: int) -> Test:
+    test = db.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
-
-    test_questions = (
-        db.query(TestQuestion)
-        .options(joinedload(TestQuestion.question).joinedload(Question.answers))
-        .filter(TestQuestion.test_id == test_id)
-        .order_by(TestQuestion.order)
-        .all()
-    )
-
-    if not test_questions:
-        raise HTTPException(status_code=404, detail="В тесте нет задач")
-
-    return test, test_questions
+    return test
 
 
-def _build_results(
-    request: Request,
+def _get_questions_for_test(test: Test) -> List[Question]:
+    """
+    Возвращает список вопросов для теста в зафиксированном порядке.
+    Предпочитаем test.test_questions (если есть), иначе test.questions.
+    """
+    # Через связующую таблицу (TestQuestion), если она есть
+    if hasattr(test, "test_questions") and test.test_questions:
+        ordered_links = sorted(
+            test.test_questions,
+            key=lambda link: getattr(link, "order", getattr(link, "position", link.id)),
+        )
+        questions: List[Question] = [link.question for link in ordered_links if link.question]
+        return questions
+
+    # Прямое many-to-many
+    if hasattr(test, "questions") and test.questions:
+        try:
+            return sorted(test.questions, key=lambda q: getattr(q, "order", q.id))
+        except Exception:
+            return list(test.questions)
+
+    return []
+
+
+def _get_or_create_attempt(
+    db: Session,
     test: Test,
-    test_questions: List[TestQuestion],
-    state: Dict[str, Any],
-) -> HTMLResponse:
-    """Посчитать баллы и отрисовать страницу результатов (без записи в БД)."""
-    answers_state: Dict[str, Any] = state.get("answers", {})
-    rows = []
-    total_score = 0.0
-    max_total = 0.0
+    user_id: int,
+) -> TestAttempt:
+    """
+    Берём последнюю попытку пользователя по тесту.
+    Если нет — создаём новую.
+    """
+    stmt = (
+        select(TestAttempt)
+        .where(
+            TestAttempt.test_id == test.id,
+            TestAttempt.user_id == user_id,
+        )
+        .order_by(TestAttempt.id.desc())
+    )
+    attempt: Optional[TestAttempt] = db.scalars(stmt).first()
 
-    for idx, tq in enumerate(test_questions):
-        q: Question = tq.question
-        q_key = str(q.id)
-        stored = answers_state.get(q_key)
+    if attempt is None:
+        attempt = TestAttempt(test_id=test.id, user_id=user_id)
+        if hasattr(attempt, "started_at"):
+            attempt.started_at = datetime.utcnow()
+        db.add(attempt)
+        db.flush()
 
-        max_points = getattr(tq, "max_points", 1) or 1
-        max_total += max_points
+    return attempt
 
-        answer_type = getattr(q, "answer_type", "text")
-        all_answers: List[Answer] = list(q.answers or [])
 
-        your_answer = ""
-        correct_answer = ""
-        gained = 0.0
+def _load_attempt_answers_map(
+    db: Session,
+    attempt: TestAttempt,
+) -> Dict[int, TestAttemptAnswer]:
+    """
+    Все ответы попытки: question_id -> TestAttemptAnswer
+    """
+    stmt = select(TestAttemptAnswer).where(TestAttemptAnswer.attempt_id == attempt.id)
+    items: List[TestAttemptAnswer] = list(db.scalars(stmt).all())
+    return {item.question_id: item for item in items}
 
-        if answer_type == "text":
-            correct_answer = (
-                getattr(q, "correct_answer_text", None)
-                or getattr(q, "correct_text", None)
-                or ""
-            )
-            if stored and stored.get("mode") == "text":
-                your_answer = stored.get("value") or ""
-                if correct_answer:
-                    if (
-                        your_answer.strip().lower()
-                        == correct_answer.strip().lower()
-                    ):
-                        gained = max_points
-        else:
-            # один/несколько вариантов
-            correct_opts = [a for a in all_answers if getattr(a, "is_correct", False)]
-            correct_ids = [a.id for a in correct_opts]
-            correct_answer = "; ".join(a.text for a in correct_opts if a.text)
 
-            if stored:
-                mode = stored.get("mode")
-                value = stored.get("value") or []
-                if mode == "single":
-                    selected_ids = [int(value)]
-                elif mode == "multiple":
-                    selected_ids = [int(v) for v in value]
-                else:
-                    selected_ids = []
+def _extract_answer_values(
+    taa: Optional[TestAttemptAnswer],
+) -> Tuple[Optional[int], str]:
+    """
+    Вытащить из ответа:
+      - id выбранного варианта (для задач с вариантами),
+      - текст ответа (для текстовых задач).
+    Разные имена полей учитываем.
+    """
+    if taa is None:
+        return None, ""
 
-                your_answer = "; ".join(
-                    a.text for a in all_answers if a.id in selected_ids and a.text
-                )
+    selected_id: Optional[int] = None
+    for field in ("answer_id", "selected_answer_id", "option_id"):
+        if hasattr(taa, field):
+            selected_id = getattr(taa, field)
+            if selected_id is not None:
+                break
 
-                if set(selected_ids) == set(correct_ids) and correct_ids:
-                    gained = max_points
+    text_value = ""
+    for field in ("answer_text", "text_answer", "value"):
+        if hasattr(taa, field):
+            text_value = getattr(taa, field) or ""
+            if text_value:
+                break
 
-        total_score += gained
+    return selected_id, text_value
 
-        rows.append(
+
+def _save_answer_to_db(
+    db: Session,
+    attempt: TestAttempt,
+    question: Question,
+    answer_id: Optional[int],
+    answer_text: str,
+) -> None:
+    """
+    Записывает / обновляет TestAttemptAnswer для текущего вопроса.
+    Вызывается ПЕРВЫМ делом при любом сабмите.
+    """
+    stmt = select(TestAttemptAnswer).where(
+        TestAttemptAnswer.attempt_id == attempt.id,
+        TestAttemptAnswer.question_id == question.id,
+    )
+    taa: Optional[TestAttemptAnswer] = db.scalars(stmt).first()
+
+    if taa is None:
+        taa = TestAttemptAnswer(
+            attempt_id=attempt.id,
+            question_id=question.id,
+        )
+        db.add(taa)
+
+    # id выбранного варианта
+    for field in ("answer_id", "selected_answer_id", "option_id"):
+        if hasattr(taa, field):
+            setattr(taa, field, answer_id)
+
+    # текст ответа
+    cleaned_text = (answer_text or "").strip()
+    for field in ("answer_text", "text_answer", "value"):
+        if hasattr(taa, field):
+            setattr(taa, field, cleaned_text)
+
+
+def _build_navigation(
+    questions: List[Question],
+    answers_map: Dict[int, TestAttemptAnswer],
+    current_index: int,
+) -> List[Dict]:
+    """
+    Данные для кружочков-навигации.
+    """
+    nav = []
+    for idx, q in enumerate(questions):
+        taa = answers_map.get(q.id)
+        selected_id, text_val = _extract_answer_values(taa)
+        answered = bool(selected_id is not None or (text_val and text_val.strip()))
+        nav.append(
             {
-                "index": idx + 1,
-                "question": q,
-                "your_answer": your_answer or "—",
-                "correct_answer": correct_answer or "—",
-                "score": gained,
-                "max_points": max_points,
+                "number": idx + 1,
+                "answered": answered,
+                "current": (idx + 1) == current_index,
             }
         )
-
-    ctx = {
-        "request": request,
-        "test": test,
-        "rows": rows,
-        "total_score": total_score,
-        "max_total": max_total,
-    }
-    return templates.TemplateResponse("test_result.html", ctx)
+    return nav
 
 
-@router.get("/run/{test_id}/{index}", response_class=HTMLResponse)
+# ---------- ROUTES ----------
+
+
+@router.get("/run/{test_id}")
+async def start_test(
+    request: Request,
+    test_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_student),
+):
+    """
+    Старт теста -> редирект на 1‑й вопрос.
+    """
+    test = _get_test_or_404(db, test_id)
+    questions = _get_questions_for_test(test)
+    if not questions:
+        raise HTTPException(status_code=400, detail="В тесте нет вопросов")
+
+    _get_or_create_attempt(db, test, user.id)
+    db.commit()
+
+    return RedirectResponse(
+        url=f"/ui/tests/run/{test_id}/1",
+        status_code=302,
+    )
+
+
+@router.get("/run/{test_id}/{position}")
 async def run_test_get(
-    test_id: int,
-    index: int,
     request: Request,
+    test_id: int,
+    position: int,
     db: Session = Depends(get_db),
     user=Depends(require_student),
 ):
     """
-    Первый показ страницы или прямой переход по ссылке /ui/tests/run/{test_id}/{index}
-    index — 0‑based номер вопроса.
+    Показ вопроса № position.
     """
-    test, test_questions = _load_test_questions(db, test_id)
+    test = _get_test_or_404(db, test_id)
+    questions = _get_questions_for_test(test)
+    if not questions:
+        raise HTTPException(status_code=400, detail="В тесте нет вопросов")
 
-    total_questions = len(test_questions)
-    if index < 0:
-        index = 0
-    if index >= total_questions:
-        index = total_questions - 1
+    total = len(questions)
+    if position < 1 or position > total:
+        raise HTTPException(status_code=404, detail="Вопрос не найден")
 
-    tq = test_questions[index]
-    question: Question = tq.question
+    attempt = _get_or_create_attempt(db, test, user.id)
+    answers_map = _load_attempt_answers_map(db, attempt)
 
-    # пустое состояние новой попытки
-    state = {"current_index": index, "answers": {}}
-    state_json = json.dumps(state, ensure_ascii=False)
+    question = questions[position - 1]
+    taa = answers_map.get(question.id)
+    selected_answer_id, text_answer = _extract_answer_values(taa)
 
-    # варианты без пустых текстов
-    options = [a for a in (question.answers or []) if (a.text or "").strip()]
+    # варианты ответа — только с непустым текстом
+    options: List[Answer] = []
+    if hasattr(question, "answers") and question.answers:
+        for opt in question.answers:
+            text = getattr(opt, "text", None)
+            if text and str(text).strip():
+                options.append(opt)
 
-    ctx = {
-        "request": request,
-        "test": test,
-        "question": question,
-        "answers": options,
-        "index": index,
-        "total_questions": total_questions,
-        "max_points": getattr(tq, "max_points", 1) or 1,
-        "selected_answer_id": None,
-        "selected_answer_ids": [],
-        "answer_text": "",
-        "state_json": state_json,
-    }
-    return templates.TemplateResponse("test_run.html", ctx)
+    nav = _build_navigation(questions, answers_map, position)
+    max_score = getattr(test, "max_score", None)
+
+    return templates.TemplateResponse(
+        "test_run.html",
+        {
+            "request": request,
+            "test": test,
+            "attempt": attempt,
+            "question": question,
+            "position": position,
+            "total_questions": total,
+            "max_score": max_score,
+            "options": options,
+            "selected_answer_id": selected_answer_id,
+            "text_answer": text_answer,
+            "nav": nav,
+        },
+    )
 
 
-@router.post("/run/{test_id}/{index}", response_class=HTMLResponse)
+@router.post("/run/{test_id}/{position}")
 async def run_test_post(
-    test_id: int,
-    index: int,
     request: Request,
+    test_id: int,
+    position: int,
     db: Session = Depends(get_db),
     user=Depends(require_student),
+    # поля формы
+    answer_id: Optional[int] = Form(None),
+    answer_text: str = Form(""),
+    action: str = Form("next"),
+    goto: Optional[int] = Form(None),
 ):
     """
-    Обработка ответов + навигация (предыдущий/следующий/к вопросу N/завершить).
-    Всё состояние теста хранится в скрытом JSON‑поле state.
+    Обработка ответа.
+    1) ВСЕГДА сохраняем ответ в БД.
+    2) Потом решаем, куда переходить:
+       - prev / next
+       - конкретный номер вопроса (кружки)
+       - save (остаться на месте)
+       - finish (завершить тест).
     """
-    form = await request.form()
-    action = form.get("action", "stay")
+    test = _get_test_or_404(db, test_id)
+    questions = _get_questions_for_test(test)
+    if not questions:
+        raise HTTPException(status_code=400, detail="В тесте нет вопросов")
 
-    # актуальный индекс — из формы, а не из URL
-    try:
-        index = int(form.get("index", "0"))
-    except ValueError:
-        index = 0
+    total = len(questions)
+    if position < 1 or position > total:
+        raise HTTPException(status_code=404, detail="Вопрос не найден")
 
-    raw_state = form.get("state") or "{}"
-    try:
-        state: Dict[str, Any] = json.loads(raw_state)
-    except json.JSONDecodeError:
-        state = {}
-    if "answers" not in state:
-        state["answers"] = {}
-    answers_state: Dict[str, Any] = state["answers"]
+    attempt = _get_or_create_attempt(db, test, user.id)
+    question = questions[position - 1]
 
-    test, test_questions = _load_test_questions(db, test_id)
-    total_questions = len(test_questions)
+    # 1. Сохраняем ответ
+    _save_answer_to_db(
+        db=db,
+        attempt=attempt,
+        question=question,
+        answer_id=answer_id,
+        answer_text=answer_text,
+    )
+    db.commit()
 
-    if index < 0:
-        index = 0
-    if index >= total_questions:
-        index = total_questions - 1
-
-    tq = test_questions[index]
-    question: Question = tq.question
-    q_key = str(question.id)
-
-    # читаем ответ из формы
-    answer_text = (form.get("answer_text") or "").strip()
-    selected_single = form.get("selected_answer_id")
-    selected_multi = [v for v in form.getlist("selected_answer_ids") if v]
-
-    if answer_text:
-        answers_state[q_key] = {"mode": "text", "value": answer_text}
-    elif selected_multi:
-        answers_state[q_key] = {
-            "mode": "multiple",
-            "value": [int(v) for v in selected_multi],
-        }
-    elif selected_single:
-        answers_state[q_key] = {"mode": "single", "value": int(selected_single)}
+    # 2. Навигация
+    if goto is not None:
+        next_position = max(1, min(total, goto))
     else:
-        answers_state.pop(q_key, None)
+        action = (action or "next").lower()
+        if action == "prev":
+            next_position = max(1, position - 1)
+        elif action == "save":
+            next_position = position
+        elif action == "finish":
+            if hasattr(attempt, "finished_at"):
+                attempt.finished_at = datetime.utcnow()
+            db.commit()
+            return RedirectResponse(
+                url="/ui/account",
+                status_code=303,
+            )
+        else:  # next
+            next_position = min(total, position + 1)
 
-    # навигация
-    if action == "prev":
-        new_index = max(index - 1, 0)
-    elif action == "next":
-        new_index = min(index + 1, total_questions - 1)
-    elif action.startswith("goto:"):
-        try:
-            new_index = int(action.split(":", 1)[1])
-        except ValueError:
-            new_index = index
-        new_index = max(0, min(new_index, total_questions - 1))
-    elif action == "finish":
-        state["current_index"] = index
-        return _build_results(request, test, test_questions, state)
-    else:
-        new_index = index
-
-    state["current_index"] = new_index
-    state_json = json.dumps(state, ensure_ascii=False)
-
-    tq = test_questions[new_index]
-    question = tq.question
-    max_points = getattr(tq, "max_points", 1) or 1
-
-    # восстановление ответа для нового вопроса
-    q_key = str(question.id)
-    stored = answers_state.get(q_key, {})
-    selected_answer_id = None
-    selected_answer_ids: List[int] = []
-    answer_text_restored = ""
-
-    mode = stored.get("mode")
-    value = stored.get("value")
-    if mode == "text":
-        answer_text_restored = value or ""
-    elif mode == "single":
-        if value is not None:
-            selected_answer_id = int(value)
-    elif mode == "multiple":
-        selected_answer_ids = [int(v) for v in (value or [])]
-
-    options = [a for a in (question.answers or []) if (a.text or "").strip()]
-
-    ctx = {
-        "request": request,
-        "test": test,
-        "question": question,
-        "answers": options,
-        "index": new_index,
-        "total_questions": total_questions,
-        "max_points": max_points,
-        "selected_answer_id": selected_answer_id,
-        "selected_answer_ids": selected_answer_ids,
-        "answer_text": answer_text_restored,
-        "state_json": state_json,
-    }
-    return templates.TemplateResponse("test_run.html", ctx)
+    return RedirectResponse(
+        url=f"/ui/tests/run/{test_id}/{next_position}",
+        status_code=303,
+    )
