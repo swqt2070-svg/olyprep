@@ -6,11 +6,11 @@
         <div class="page-title">Привет, {{ user.email }}</div>
         <div class="page-subtitle">
             {% if user.role == 'admin' %}
-                У вас полный доступ: администрирование, создание тестов и задач.
+                Вы администратор: полный доступ к задачам, тестам и управлению пользователями.
             {% elif user.role == 'teacher' %}
-                Вы можете создавать тренировочные наборы задач и выдавать тесты.
+                Вы учитель: создавайте задачи и тесты для своих учеников.
             {% else %}
-                Вы можете проходить тесты, решать задачи и отслеживать прогресс.
+                Вы ученик: проходите тесты и тренируйтесь на задачах.
             {% endif %}
         </div>
     </div>
@@ -18,14 +18,14 @@
 
 <div class="grid">
     <section class="card">
-        <h2 style="font-size:1.1rem;">Навигация</h2>
+        <h2 style="font-size:1.1rem;">Рабочая зона</h2>
         <div class="kpi-row">
             {% if user.role in ['admin', 'teacher'] %}
             <div class="stat-card">
-                <div class="stat-label">Работа с задачами</div>
-                <div class="stat-value">Библиотека</div>
+                <div class="stat-label">Библиотека задач</div>
+                <div class="stat-value">Задачи</div>
                 <div class="stat-meta">
-                    Просмотр, добавление и редактирование задач для подготовки.
+                    Просмотр, добавление и использование задач в тестах.
                 </div>
                 <div style="margin-top:0.6rem; display:flex; gap:0.5rem;">
                     <a class="btn btn-primary" href="/ui/questions">Открыть библиотеку</a>
@@ -33,10 +33,10 @@
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Работа с тестами</div>
-                <div class="stat-value">Тесты</div>
+                <div class="stat-label">Тесты</div>
+                <div class="stat-value">Конструктор тестов</div>
                 <div class="stat-meta">
-                    Создание авторских тестов из задач библиотеки, выдача ученикам.
+                    Собирайте наборы задач и выдавайте тесты ученикам.
                 </div>
                 <div style="margin-top:0.6rem; display:flex; gap:0.5rem;">
                     <a class="btn btn-primary" href="/ui/tests">Список тестов</a>
@@ -44,34 +44,42 @@
             </div>
             {% endif %}
 
+            {% if user.role == 'student' %}
             <div class="stat-card">
                 <div class="stat-label">Тренировка</div>
-                <div class="stat-value">Решение задач</div>
+                <div class="stat-value">Доступные тесты</div>
                 <div class="stat-meta">
-                    Проходите тесты, тренируйтесь на задачах прошлых лет и отслеживайте прогресс.
+                    Выберите тест, решите задачи и посмотрите баллы.
                 </div>
                 <div style="margin-top:0.6rem; display:flex; gap:0.5rem;">
                     <a class="btn btn-primary" href="/ui/tests">Перейти к тестам</a>
                 </div>
             </div>
+            {% endif %}
         </div>
     </section>
 
     <aside class="card">
         <h2 style="font-size:1.05rem;">Быстрый старт</h2>
-        {% if user.role in ['admin', 'teacher'] %}
+        {% if user.role == 'admin' %}
+            <ul class="muted" style="margin-top:0.75rem; list-style:none;">
+                <li style="margin-bottom:0.4rem;">1. Создайте задач в <a href="/ui/questions">библиотеке задач</a>.</li>
+                <li style="margin-bottom:0.4rem;">2. Соберите тесты в разделе <a href="/ui/tests">«Тесты»</a>.</li>
+                <li style="margin-bottom:0.4rem;">3. Настройте роли пользователей в разделе <a href="/ui/admin/users">«Пользователи»</a>.</li>
+            </ul>
+        {% elif user.role == 'teacher' %}
             <ul class="muted" style="margin-top:0.75rem; list-style:none;">
                 <li style="margin-bottom:0.4rem;">1. Создайте несколько задач в <a href="/ui/questions/new">библиотеке задач</a>.</li>
-                <li style="margin-bottom:0.4rem;">2. Соберите из них тест в разделе <a href="/ui/tests">тестов</a>.</li>
-                <li style="margin-bottom:0.4rem;">3. Дайте ученикам ссылку на тест или выведите список доступных тестов.</li>
+                <li style="margin-bottom:0.4rem;">2. Соберите из них тесты в разделе <a href="/ui/tests">«Тесты»</a>.</li>
+                <li style="margin-bottom:0.4rem;">3. Передайте ссылки на тесты ученикам.</li>
             </ul>
         {% else %}
             <p class="muted" style="margin-top:0.75rem;">
-                Откройте раздел <a href="/ui/tests">«Тесты»</a> и выберите набор задач для тренировки.
+                Откройте <a href="/ui/tests">раздел «Тесты»</a>, выберите доступный тест и пройдите его.
             </p>
         {% endif %}
         <p class="muted" style="margin-top:0.5rem;">
-            Платформа сейчас в режиме MVP — набор функций будет постепенно расширяться.
+            Платформа сейчас в режиме MVP — функционал будет расширяться.
         </p>
     </aside>
 </div>

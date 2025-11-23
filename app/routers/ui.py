@@ -1,13 +1,20 @@
-from fastapi import APIRouter, Depends, Request, Form, status, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    Request,
+    Form,
+    status,
+    HTTPException,
+)
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import json
 
 from app.deps import get_db, get_current_user, require_role
 from app.models import User, Question, Test, TestQuestion, Submission, Answer
 from app.security import hash_password, verify_password, create_token
-import json
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
@@ -18,6 +25,7 @@ def redirect(url: str) -> RedirectResponse:
 
 
 # ---------- AUTH UI ----------
+
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
@@ -66,7 +74,12 @@ async def register_submit(
     if db.query(User).filter(User.email == email).first():
         return templates.TemplateResponse(
             "register.html",
-            {"request": request, "user": None, "error": "Такая почта уже используется", "success": None},
+            {
+                "request": request,
+                "user": None,
+                "error": "Такая почта уже используется",
+                "success": None,
+            },
             status_code=400,
         )
 
@@ -92,6 +105,7 @@ async def logout():
 
 # ---------- DASHBOARD ----------
 
+
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request, user: User = Depends(get_current_user)):
     return templates.TemplateResponse(
@@ -101,6 +115,7 @@ async def dashboard(request: Request, user: User = Depends(get_current_user)):
 
 
 # ---------- QUESTIONS UI ----------
+
 
 @router.get("/questions", response_class=HTMLResponse)
 async def questions_list(
@@ -171,7 +186,7 @@ async def question_new_submit(
             if val:
                 raw_options.append(val)
         options_json = json.dumps(raw_options, ensure_ascii=False)
-        correct = correct_index  # индекс правильного варианта (строкой)
+        correct = correct_index  # индекс правильного варианта строкой
 
     q = Question(
         text=text,
@@ -194,6 +209,7 @@ async def question_new_submit(
 
 
 # ---------- TESTS UI ----------
+
 
 @router.get("/tests", response_class=HTMLResponse)
 async def tests_list(
@@ -232,7 +248,9 @@ async def test_view(
     if not test:
         raise HTTPException(status_code=404, detail="test not found")
 
-    tqs: List[TestQuestion] = db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+    tqs: List[TestQuestion] = (
+        db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+    )
     items = []
     max_points = 0
     for tq in tqs:
@@ -315,7 +333,9 @@ async def test_submit(
     if not submission or submission.user_id != user.id or submission.test_id != test_id:
         raise HTTPException(status_code=400, detail="invalid submission")
 
-    tqs: List[TestQuestion] = db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+    tqs: List[TestQuestion] = (
+        db.query(TestQuestion).filter(TestQuestion.test_id == test_id).all()
+    )
 
     items = []
     max_points = 0
@@ -342,7 +362,7 @@ async def test_submit(
                 correct_flag = 1 if ok else 0
                 earned = tq.points if ok else 0
             elif q.answer_type == "single":
-                ok = (q.correct == given)
+                ok = q.correct == given
                 correct_flag = 1 if ok else 0
                 earned = tq.points if ok else 0
             else:
@@ -378,5 +398,71 @@ async def test_submit(
             "max_points": max_points,
             "submission": submission,
             "result": result,
+        },
+    )
+
+
+# ---------- ADMIN USERS UI ----------
+
+
+@router.get("/admin/users", response_class=HTMLResponse)
+async def admin_users_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    users = db.query(User).order_by(User.id.asc()).all()
+    return templates.TemplateResponse(
+        "users_admin.html",
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "error": None,
+            "success": None,
+        },
+    )
+
+
+@router.post("/admin/users/set-role", response_class=HTMLResponse)
+async def admin_set_role(
+    request: Request,
+    email: str = Form(...),
+    role: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    allowed_roles = ("admin", "teacher", "student")
+
+    email = email.strip()
+    role = role.strip()
+
+    error: Optional[str] = None
+    success: Optional[str] = None
+
+    if role not in allowed_roles:
+        error = "Недопустимая роль."
+    else:
+        target = db.query(User).filter(User.email == email).first()
+        if not target:
+            error = "Пользователь с такой почтой не найден."
+        elif target.id == user.id and role != "admin":
+            error = "Нельзя понизить роль собственного админ‑аккаунта."
+        else:
+            old_role = target.role
+            target.role = role
+            db.add(target)
+            db.commit()
+            success = f"Роль пользователя {email} изменена с {old_role} на {role}."
+
+    users = db.query(User).order_by(User.id.asc()).all()
+    return templates.TemplateResponse(
+        "users_admin.html",
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "error": error,
+            "success": success,
         },
     )

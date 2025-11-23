@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Пользователи — OlyPrep{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="page-title">Управление пользователями</div>
+        <div class="page-subtitle">
+            Только администратор может менять роли. Первый зарегистрированный пользователь всегда админ.
+        </div>
+    </div>
+</div>
+
+<section class="card">
+    {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+    {% if success %}
+        <div class="alert alert-success">{{ success }}</div>
+    {% endif %}
+
+    <h2 style="font-size:1.0rem;">Смена роли по почте</h2>
+
+    <form method="post" action="/ui/admin/users/set-role" class="form" style="margin-top:0.6rem;">
+        <div class="field">
+            <label class="field-label">Почта пользователя <span>*</span></label>
+            <input type="text" name="email" placeholder="user@example.com" required>
+        </div>
+        <div class="field">
+            <label class="field-label">Новая роль <span>*</span></label>
+            <select name="role" required>
+                <option value="student">student (ученик)</option>
+                <option value="teacher">teacher (учитель)</option>
+                <option value="admin">admin (администратор)</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:0.4rem;">Применить</button>
+    </form>
+
+    <hr style="border:none; border-top:1px solid rgba(148,163,184,0.35); margin:1.1rem 0;">
+
+    <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">Список пользователей</h2>
+
+    {% if users|length == 0 %}
+        <p class="muted">Пользователей пока нет.</p>
+    {% else %}
+        <section class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:60px;">ID</th>
+                        <th>Почта</th>
+                        <th style="width:120px;">Роль</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                        <tr{% if user.id == u.id %} style="background:rgba(34,197,94,0.06);" {% endif %}>
+                            <td>#{{ u.id }}</td>
+                            <td>
+                                {% if user.id == u.id %}
+                                    <strong>{{ u.email }}</strong> <span class="muted">(вы)</span>
+                                {% else %}
+                                    {{ u.email }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge{% if u.role == 'admin' %} badge-blue{% elif u.role == 'teacher' %} badge-green{% endif %}">
+                                    {{ u.role }}
+                                </span>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    {% endif %}
+</section>
+{% endblock %}
