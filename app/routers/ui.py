@@ -1363,6 +1363,16 @@ async def test_start(
     return redirect(f"/ui/tests/{test_id}?submission_id={s.id}")
 
 
+@router.get("/tests/{test_id}/start")
+async def test_start_get(
+    test_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    # Allow starting a test via GET (link click) by delegating to the POST handler.
+    return await test_start(test_id=test_id, db=db, user=user)
+
+
 @router.post("/tests/{test_id}/submit", response_class=HTMLResponse)
 async def test_submit(
     test_id: int,
