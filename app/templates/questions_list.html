@@ -1,85 +1,91 @@
 {% extends "base.html" %}
-{% block title %}Библиотека задач — OlyPrep{% endblock %}
+{% block title %}Библиотека задач{% endblock %}
+
 {% block content %}
 <div class="page-header">
-    <div>
-        <div class="page-title">Библиотека задач</div>
-        <div class="page-subtitle">
-            Все задачи, доступные для использования в тестах.
-        </div>
-    </div>
-    <div class="page-actions">
-        {% if user and user.role in ['admin', 'teacher'] %}
-            <a href="/ui/questions/new" class="btn btn-primary">Новая задача</a>
+    <h1>Библиотека задач</h1>
+    <div class="page-header-actions">
+        {% if user and user.role in ["admin", "teacher"] %}
+        <a href="/ui/questions/new" class="btn btn-primary">Создать задачу</a>
         {% endif %}
     </div>
 </div>
 
-<section class="card">
-    {% if error %}
-        <div class="alert alert-error">{{ error }}</div>
-    {% endif %}
-    {% if success %}
-        <div class="alert alert-success">{{ success }}</div>
-    {% endif %}
+{% if error %}
+<div class="alert alert-danger mt-3">{{ error }}</div>
+{% endif %}
+{% if success %}
+<div class="alert alert-success mt-3">{{ success }}</div>
+{% endif %}
 
-    {% if not questions or questions|length == 0 %}
-        <p class="muted">В библиотеке пока нет задач.</p>
-    {% else %}
-        <section class="table-card">
-            <table>
+{% if not library %}
+<p class="mt-4 text-muted">Задач пока нет.</p>
+{% else %}
+
+{% for category, grades in library|dictsort %}
+<div class="card mt-4">
+    <div class="card-header">
+        <strong>Категория:</strong> {{ category }}
+    </div>
+    <div class="card-body">
+        {% for grade, years in grades|dictsort %}
+        <h5 class="mt-2">
+            Класс:
+            {% if grade == 0 %}&mdash;{% else %}{{ grade }}{% endif %}
+        </h5>
+
+        {% for year, stages in years|dictsort %}
+        <h6 class="mt-2">Год: {{ year }}</h6>
+
+        {% for stage, questions in stages|dictsort %}
+        <h6 class="mt-1 text-muted">Этап: {{ stage }}</h6>
+
+        <div class="table-responsive mb-3">
+            <table class="table table-dark table-striped table-sm align-middle">
                 <thead>
                     <tr>
-                        <th style="width:70px;">ID</th>
-                        <th>Текст</th>
-                        <th style="width:140px;">Тип</th>
-                        {% if user and user.role in ['admin', 'teacher'] %}
-                            <th style="width:210px;">Действия</th>
+                        <th style="width: 60px;">ID</th>
+                        <th>Текст задачи</th>
+                        <th style="width: 160px;">Тип</th>
+                        {% if user and user.role in ["admin", "teacher"] %}
+                        <th style="width: 160px;">Действия</th>
                         {% endif %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for q in questions %}
-                        <tr>
-                            <td>#{{ q.id }}</td>
-                            <td>
-                                {{ q.text[:140] }}{% if q.text|length > 140 %}…{% endif %}
-                            </td>
-                            <td>
-                                {% if q.answer_type == 'text' %}
-                                    Текст
-                                {% elif q.answer_type == 'single' %}
-                                    Один вариант
-                                {% elif q.answer_type == 'multi' %}
-                                    Несколько вариантов
-                                {% else %}
-                                    {{ q.answer_type }}
-                                {% endif %}
-                            </td>
-                            {% if user and user.role in ['admin', 'teacher'] %}
-                                <td>
-                                    <a href="/ui/questions/{{ q.id }}/edit"
-                                       class="btn btn-ghost"
-                                       style="padding:0.25rem 0.7rem; font-size:0.78rem;">
-                                        Редактировать
-                                    </a>
-                                    <form method="post"
-                                          action="/ui/questions/{{ q.id }}/delete"
-                                          style="display:inline;">
-                                        <button type="submit"
-                                                class="btn btn-ghost"
-                                                style="padding:0.25rem 0.7rem; font-size:0.78rem; margin-left:0.25rem;"
-                                                onclick="return confirm('Удалить вопрос #{{ q.id }}? Он будет удалён из тестов и ответов.');">
-                                            Удалить
-                                        </button>
-                                    </form>
-                                </td>
+                    <tr>
+                        <td>{{ q.id }}</td>
+                        <td>{{ q.text | truncate(160, True, '…') }}</td>
+                        <td>
+                            {% if q.answer_type == "single" %}
+                                Выбрать один
+                            {% else %}
+                                Написать текст
                             {% endif %}
-                        </tr>
+                        </td>
+                        {% if user and user.role in ["admin", "teacher"] %}
+                        <td>
+                            <a href="/ui/questions/{{ q.id }}/edit" class="btn btn-sm btn-outline-light">Редактировать</a>
+                            <form method="post"
+                                  action="/ui/questions/{{ q.id }}/delete"
+                                  style="display:inline-block"
+                                  onsubmit="return confirm('Удалить задачу #{{ q.id }}?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
-        </section>
-    {% endif %}
-</section>
+        </div>
+        {% endfor %}
+        {% endfor %}
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+
+{% endif %}
 {% endblock %}

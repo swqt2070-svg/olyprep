@@ -20,9 +20,22 @@ class Question(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     text = Column(Text, nullable=False)
-    answer_type = Column(String, nullable=False)  # "text" | "single"
-    options = Column(Text, nullable=True)         # JSON строка для single
-    correct = Column(Text, nullable=False)        # текст или индекс
+    answer_type = Column(String, nullable=False)  # 'text' или 'single'
+    options = Column(Text, nullable=True)         # JSON-массив вариантов
+    correct = Column(Text, nullable=True)         # строка или индекс варианта
+    image_path = Column(String, nullable=True)
+
+    # НОВОЕ:
+    category = Column(String, nullable=True)  # например "Дерево"
+    grade = Column(Integer, nullable=True)    # номер класса: 7, 8, 9, 10, 11
+    year = Column(String, nullable=True)      # "1819", "2324" и т.п.
+    stage = Column(String, nullable=True)     # "муницип", "регион", "закл"
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    test_links = relationship("TestQuestion", back_populates="question", cascade="all, delete-orphan")
+    answers = relationship("Answer", back_populates="question", cascade="all, delete-orphan")
+    # текст или индекс
 
 
 # -------- Тест --------
@@ -68,3 +81,4 @@ class Answer(Base):
     given = Column(Text, nullable=False)
     correct = Column(Integer, default=0)
     points = Column(Integer, default=0)
+

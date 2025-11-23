@@ -446,93 +446,180 @@ def _try_parse_choice(
         "correct": str(correct_index),
     }
 
-
 def parse_markdown_to_question(raw: str) -> Optional[dict]:
     """
-    Понимает два варианта:
+    Понимает файлы вида:
 
-    1) где ответ в одной строке: "Ответ: ...";
-    2) структура с заголовками "# Вопрос" и "# Ответ", как в Obsidian:
-       текст вопроса + варианты, ниже блок "# Ответ" с правильным вариантом. :contentReference[oaicite:1]{index=1}
+    **КЛАСС** #класс_9
+    **ГОД** #год_1819
+    **ЭТАП** #муницип
+    **КАТЕГОРИЯ** [[#Дерево]]
+    **ТИП ВОПРОСА** #закрытый/#открытый
+    ...
+
+    # Вопрос
+    1) Текст вопроса...
+    а) вариант 1;
+    б) вариант 2;
+    в) вариант 3;
+
+    # Ответ
+    б) вариант 2;
+
+    Пустые шаблоны (нет текста вопроса и нет ответа) и заметки без "# Вопрос" — пропускаем.
     """
     text = raw.replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         return None
 
+    # если вообще нет "# Вопрос" – это не задача
+    if not re.search(r"^\s*#\s*Вопрос\b", text, re.IGNORECASE | re.MULTILINE):
+        return None
+
     lines = text.split("\n")
 
-    # ===== Вариант 2: "# Вопрос" / "# Ответ" =====
-    q_idx = None
-    a_idx = None
+    # --- ищем строку "# Вопрос" ---
+    q_header_idx = None
     for i, line in enumerate(lines):
-        stripped = line.strip()
-        heading = stripped.lstrip("#").strip()
-        if q_idx is None and re.match(r"^(Вопрос|Question)\b", heading, re.IGNORECASE):
-            q_idx = i
-        elif a_idx is None and re.match(r"^(Ответ|Answer)\b", heading, re.IGNORECASE):
-            a_idx = i
+        if re.search(r"^\s*#\s*Вопрос\b", line, re.IGNORECASE):
+            q_header_idx = i
+            break
+    if q_header_idx is None:
+        return None
 
-    if q_idx is not None and a_idx is not None and a_idx > q_idx:
-        q_lines = lines[q_idx + 1 : a_idx]
+    question_start = q_header_idx + 1
 
-        # обрезаем пустые
-        while q_lines and not q_lines[0].strip():
-            q_lines.pop(0)
-        while q_lines and not q_lines[-1].strip():
-            q_lines.pop()
+    # ---------- МЕТАДАННЫЕ из шапки ----------
+    meta_category: Optional[str] = None
+    meta_grade: Optional[int] = None
+    meta_year: Optional[str] = None
+    meta_stage: Optional[str] = None
+    meta_type: Optional[str] = None  # 'open' / 'closed'
 
-        # строка ответа — первая непустая после "# Ответ"
-        ans_line = ""
-        for j in range(a_idx + 1, len(lines)):
-            candidate = lines[j].strip()
-            if candidate:
-                ans_line = candidate
-                break
+    header_lines = lines[:q_header_idx]
 
-        if ans_line:
-            # пытаемся распарсить выбор одного варианта
-            choice = _try_parse_choice(q_lines, ans_line)
-            if choice:
-                return choice
+    for meta_line in header_lines:
+        # КЛАСС
+        m = re.match(r"\s*\*\*\s*КЛАСС\s*\*\*\s*(.+)", meta_line, re.IGNORECASE)
+        if m and meta_grade is None:
+            val = m.group(1)
+            m2 = re.search(r"(\d+)", val)
+            if m2:
+                try:
+                    meta_grade = int(m2.group(1))
+                except ValueError:
+                    pass
 
-            # fallback: просто текстовый ответ
-            question_text = "\n".join(q_lines).strip() or text
-            return {
-                "text": question_text,
-                "answer_type": "text",
-                "options_json": None,
-                "correct": ans_line.strip(),
-            }
+        # ГОД
+        m = re.match(r"\s*\*\*\s*ГОД\s*\*\*\s*(.+)", meta_line, re.IGNORECASE)
+        if m and meta_year is None:
+            val = m.group(1)
+            m2 = re.search(r"(\d+)", val)
+            if m2:
+                meta_year = m2.group(1)
 
-    # ===== Вариант 1: "Ответ: ..." в одной строке =====
+        # ЭТАП
+        m = re.match(r"\s*\*\*\s*ЭТАП\s*\*\*\s*(.+)", meta_line, re.IGNORECASE)
+        if m and meta_stage is None:
+            val = m.group(1).strip()
+            val = re.sub(r"^#+", "", val)  # "#муницип" -> "муницип"
+            meta_stage = val or None
+
+        # КАТЕГОРИЯ
+        m = re.match(r"\s*\*\*\s*КАТЕГОРИЯ\s*\*\*\s*(.+)", meta_line, re.IGNORECASE)
+        if m and meta_category is None:
+            val = m.group(1).strip()
+            # "[[#Дерево]]" -> "Дерево"
+            val = re.sub(r"^\[\[", "", val)
+            val = re.sub(r"]]$", "", val)
+            val = val.lstrip("#").strip()
+            meta_category = val or None
+
+        # ТИП ВОПРОСА (#закрытый / #открытый)
+        m = re.match(r"\s*\*\*\s*ТИП ВОПРОСА\s*\*\*\s*(.+)", meta_line, re.IGNORECASE)
+        if m and meta_type is None:
+            val = m.group(1).strip().lower()
+            if "закрытый" in val:
+                meta_type = "closed"
+            elif "открытый" in val:
+                meta_type = "open"
+
+    # ---------- границы вопроса и ответ ----------
+    answer_value = ""
+    question_end = len(lines)
+
+    # 1) "Ответ: ..." в одной строке
+    inline_idx = None
     for idx, line in enumerate(lines):
         m = re.search(r"(Ответ|Answer)\s*[:\-]\s*(.+)", line, re.IGNORECASE)
-        if not m:
-            continue
-        ans = m.group(2).strip()
-        if not ans:
-            continue
+        if m:
+            inline_idx = idx
+            answer_value = m.group(2).strip()
+            question_end = idx
+            break
 
-        q_lines = lines[:idx]
-        while q_lines and not q_lines[0].strip():
-            q_lines.pop(0)
-        while q_lines and not q_lines[-1].strip():
-            q_lines.pop()
+    # 2) заголовок "# Ответ"
+    if inline_idx is None:
+        answer_header_idx = None
+        for idx, line in enumerate(lines):
+            if re.search(r"^\s*#\s*Ответ\b", line, re.IGNORECASE):
+                answer_header_idx = idx
+                break
+        if answer_header_idx is not None:
+            question_end = answer_header_idx
+            for j in range(answer_header_idx + 1, len(lines)):
+                candidate = lines[j].strip()
+                if candidate:
+                    answer_value = candidate
+                    break
 
-        # тоже пробуем выделить варианты из тела вопроса
-        choice = _try_parse_choice(q_lines, ans)
-        if choice:
-            return choice
+    question_lines = lines[question_start:question_end]
 
-        question_text = "\n".join(q_lines).strip() or text
-        return {
-            "text": question_text,
-            "answer_type": "text",
-            "options_json": None,
-            "correct": ans,
-        }
+    # пустой вопрос + пустой ответ -> считаем шаблоном, не импортируем
+    if (not any(l.strip() for l in question_lines)) and not answer_value.strip():
+        return None
 
-    return None
+    # ---------- картинка ----------
+    image_name = None
+    m1 = re.search(r"!\[\[(.+?)\]\]", text)
+    if m1:
+        image_name = m1.group(1).strip()
+    else:
+        m2 = re.search(r"!\[[^\]]*]\((.+?)\)", text)
+        if m2:
+            image_name = m2.group(1).strip()
+
+    # ---------- выбор одного варианта ----------
+    choice_data = None
+    if meta_type != "open":  # для открытых сразу идём в текстовый режим
+        choice_data = _try_parse_choice(question_lines, answer_value)
+
+    if choice_data:
+        # choice_data уже содержит text / answer_type / options_json / correct
+        choice_data["image_name"] = image_name
+        choice_data["category"] = meta_category
+        choice_data["grade"] = meta_grade
+        choice_data["year"] = meta_year
+        choice_data["stage"] = meta_stage
+        return choice_data
+
+    # ---------- fallback: текстовый ответ ----------
+    question_text = "\n".join(question_lines).strip() or text
+    question_text = re.sub(r"!\[\[.+?\]\]", "", question_text)
+    question_text = re.sub(r"!\[[^\]]*]\(.+?\)", "", question_text)
+    question_text = question_text.strip()
+
+    return {
+        "text": question_text,
+        "answer_type": "text",
+        "correct": answer_value.strip() if answer_value else "",
+        "options_json": None,
+        "image_name": image_name,
+        "category": meta_category,
+        "grade": meta_grade,
+        "year": meta_year,
+        "stage": meta_stage,
+    }
 
 
 @router.get("/import", response_class=HTMLResponse)
@@ -614,7 +701,12 @@ async def import_submit(
             answer_type=parsed["answer_type"],
             options=parsed["options_json"],
             correct=parsed["correct"],
+            category=parsed.get("category"),
+            grade=parsed.get("grade"),
+            year=parsed.get("year"),
+            stage=parsed.get("stage"),
         )
+
         db.add(q)
         db.flush()
         created_questions.append(q)
@@ -649,17 +741,30 @@ async def questions_list(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    rows: List[Question] = db.query(Question).order_by(Question.id.desc()).all()
+    rows: List[Question] = db.query(Question).all()
+
+    # Категория -> Класс -> Год -> Этап -> [список задач]
+    library: dict[str, dict[int, dict[str, dict[str, List[Question]]]]] = {}
+
+    for q in rows:
+        cat = q.category or "Без категории"
+        grade = q.grade or 0
+        year = q.year or "—"
+        stage = q.stage or "—"
+
+        library.setdefault(cat, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
+
     return templates.TemplateResponse(
         "questions_list.html",
         {
             "request": request,
             "user": user,
-            "questions": rows,
+            "library": library,
             "error": None,
             "success": None,
         },
     )
+
 
 
 @router.get("/questions/new", response_class=HTMLResponse)
