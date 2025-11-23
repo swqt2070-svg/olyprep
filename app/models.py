@@ -40,7 +40,7 @@ class User(Base):
         "Test", back_populates="created_by", cascade="all,delete-orphan"
     )
     attempts: Mapped[List["TestAttempt"]] = relationship(
-        "TestAttempt", back_populates="student", cascade="all,delete-orphan"
+        "TestAttempt", back_populates="user", cascade="all,delete-orphan"
     )
 
 

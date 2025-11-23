@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}OlyPrep — главная{% endblock %}
+
+{% block extra_head %}
+<style>
+    .hero {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 2rem;
+        align-items: center;
+        padding: 2.5rem;
+        background: radial-gradient(circle at 20% 20%, rgba(99,102,241,0.24), rgba(15,23,42,0.92)),
+                    linear-gradient(135deg, rgba(15,23,42,0.96), rgba(12,17,33,0.9));
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-soft);
+    }
+
+    .hero h1 {
+        font-size: clamp(1.9rem, 2.8vw, 2.6rem);
+        margin-bottom: 0.75rem;
+        letter-spacing: 0.01em;
+    }
+
+    .hero p {
+        color: var(--text-muted);
+        line-height: 1.6;
+        margin-bottom: 1.25rem;
+    }
+
+    .cta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.55rem 0.9rem;
+        background: var(--accent-soft);
+        border: 1px solid rgba(99, 102, 241, 0.35);
+        border-radius: var(--radius-pill);
+        color: #c7d2fe;
+        font-size: 0.9rem;
+    }
+
+    .cards {
+        margin-top: 2rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1rem;
+    }
+
+    .card {
+        padding: 1.25rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-sm);
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .card h3 {
+        font-size: 1.05rem;
+    }
+
+    .card p {
+        color: var(--text-muted);
+        line-height: 1.5;
+    }
+
+    .card a {
+        margin-top: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: var(--accent);
+        font-weight: 600;
+    }
+
+    .hero-graphic {
+        background: radial-gradient(circle at 35% 35%, rgba(99,102,241,0.32), transparent 45%),
+                    radial-gradient(circle at 70% 25%, rgba(34,197,94,0.25), transparent 35%),
+                    radial-gradient(circle at 45% 70%, rgba(14,165,233,0.22), transparent 40%),
+                    var(--bg-elevated);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+        position: relative;
+        min-height: 240px;
+        overflow: hidden;
+        border: 1px solid var(--border-subtle);
+    }
+
+    .hero-graphic .stat {
+        position: absolute;
+        background: rgba(15,23,42,0.85);
+        border: 1px solid rgba(255,255,255,0.08);
+        padding: 0.8rem 1rem;
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .stat.one { top: 22%; left: 14%; }
+    .stat.two { top: 48%; right: 12%; }
+    .stat.three { bottom: 16%; left: 28%; }
+
+    .stat span {
+        display: block;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+
+    .stat strong {
+        font-size: 1.1rem;
+    }
+
+    @media (max-width: 900px) {
+        .hero {
+            grid-template-columns: 1fr;
+            padding: 1.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <div class="pill">Внутренний MVP для подготовки к олимпиадам</div>
+        <h1>OlyPrep: тесты, результаты и управление курсами в одном месте</h1>
+        <p>
+            Создавайте и запускайте тренировочные тесты, отслеживайте прогресс студентов,
+            импортируйте задания из .md и управляйте доступами преподавателей и администраторов.
+        </p>
+        <div class="cta">
+            <a class="btn" href="/ui/login">Войти</a>
+            <a class="btn btn-primary" href="/ui/register">Зарегистрироваться</a>
+            <a class="btn btn-ghost" href="/ui/tests">Открыть тесты</a>
+        </div>
+    </div>
+    <div class="hero-graphic">
+        <div class="stat one">
+            <span>Активных тестов</span>
+            <strong>50+</strong>
+        </div>
+        <div class="stat two">
+            <span>Студентов</span>
+            <strong>250</strong>
+        </div>
+        <div class="stat three">
+            <span>Средний результат</span>
+            <strong>78%</strong>
+        </div>
+    </div>
+</section>
+
+<section class="cards">
+    <div class="card">
+        <h3>Личный кабинет</h3>
+        <p>Быстрый доступ к своим попыткам, результатам и настройкам аккаунта.</p>
+        <a href="/ui/dashboard">Перейти в кабинет →</a>
+    </div>
+    <div class="card">
+        <h3>Банк вопросов</h3>
+        <p>Категории, классы, этапы и загрузка изображений — всё для удобного создания тестов.</p>
+        <a href="/ui/questions">Открыть библиотеку →</a>
+    </div>
+    <div class="card">
+        <h3>Импорт из Markdown</h3>
+        <p>Загрузите архив .zip с .md файлами и автоматически создайте набор вопросов.</p>
+        <a href="/ui/import">Импортировать →</a>
+    </div>
+    <div class="card">
+        <h3>Администрирование</h3>
+        <p>Управляйте ролями пользователей и настройками публикации тестов.</p>
+        <a href="/ui/admin/users">Перейти →</a>
+    </div>
+</section>
+{% endblock %}
