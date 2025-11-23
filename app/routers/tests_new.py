@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+import json
 from types import SimpleNamespace
 
 from app.deps import get_db, get_current_user
@@ -234,18 +235,25 @@ async def run_test_get(
     Показ вопроса № position.
     """
     test = _get_test_or_404(db, test_id)
-    questions = _get_questions_for_test(test)
-    if not questions:
+
+    tqs: List[TestQuestion] = (
+        db.query(TestQuestion)
+        .filter(TestQuestion.test_id == test_id)
+        .order_by(TestQuestion.order.asc())
+        .all()
+    )
+    if not tqs:
         raise HTTPException(status_code=400, detail="В тесте нет вопросов")
 
-    total = len(questions)
+    total = len(tqs)
     if position < 1 or position > total:
         raise HTTPException(status_code=404, detail="Вопрос не найден")
 
     attempt = _get_or_create_attempt(db, test, user.id)
     answers_map = _load_attempt_answers_map(db, attempt)
 
-    question = questions[position - 1]
+    link = tqs[position - 1]
+    question = link.question if hasattr(link, "question") and link.question else db.get(Question, link.question_id)
     if hasattr(question, "question") and not hasattr(question, "options"):
         if question.question is not None:
             question = question.question
@@ -272,13 +280,9 @@ async def run_test_get(
             if text and str(text).strip():
                 options.append(opt)
 
-    nav = _build_navigation(questions, answers_map, position)
-    max_score = getattr(test, "max_score", None)
-    if max_score is None:
-        try:
-            max_score = sum((getattr(link, "points", 0) or 0) for link in getattr(test, "test_questions", []))
-        except Exception:
-            max_score = 0
+    questions_for_nav = [q.question if hasattr(q, "question") and q.question else q for q in tqs]
+    nav = _build_navigation(questions_for_nav, answers_map, position)
+    max_score = sum((getattr(tq, "points", 0) or 0) for tq in tqs)
 
     return templates.TemplateResponse(
         "test_run.html",
@@ -325,16 +329,22 @@ async def run_test_post(
        - finish (завершить тест).
     """
     test = _get_test_or_404(db, test_id)
-    questions = _get_questions_for_test(test)
-    if not questions:
+    tqs: List[TestQuestion] = (
+        db.query(TestQuestion)
+        .filter(TestQuestion.test_id == test_id)
+        .order_by(TestQuestion.order.asc())
+        .all()
+    )
+    if not tqs:
         raise HTTPException(status_code=400, detail="В тесте нет вопросов")
 
-    total = len(questions)
+    total = len(tqs)
     if position < 1 or position > total:
         raise HTTPException(status_code=404, detail="Вопрос не найден")
 
     attempt = _get_or_create_attempt(db, test, user.id)
-    question = questions[position - 1]
+    link = tqs[position - 1]
+    question = link.question if hasattr(link, "question") and link.question else db.get(Question, link.question_id)
     if hasattr(question, "question") and not hasattr(question, "options"):
         if question.question is not None:
             question = question.question
