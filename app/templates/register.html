@@ -2,34 +2,46 @@
 {% block title %}Регистрация — OlyPrep{% endblock %}
 {% block content %}
 <div class="center">
-    <div class="card card-narrow">
+    <section class="card card-narrow">
         <div class="card-header-inline">
-            <h1>Регистрация</h1>
-            <div class="chip">
+            <h1 style="font-size:1.1rem;">Регистрация</h1>
+            <span class="chip">
                 <span class="chip-dot"></span>
-                <span>первый пользователь станет админом</span>
-            </div>
+                Новый аккаунт
+            </span>
         </div>
+
         {% if error %}
             <div class="alert alert-error">{{ error }}</div>
         {% endif %}
         {% if success %}
             <div class="alert alert-success">{{ success }}</div>
         {% endif %}
+
         <form method="post" action="/ui/register" class="form">
             <div class="field">
-                <label class="field-label">Почта <span>*</span></label>
-                <input type="text" name="email" required placeholder="you@example.com">
+                <label class="field-label">Почта</label>
+                <input type="text" name="email" required>
             </div>
             <div class="field">
-                <label class="field-label">Пароль <span>*</span></label>
-                <input type="password" name="password" required placeholder="минимум 6 символов">
+                <label class="field-label">Пароль</label>
+                <input type="password" name="password" required>
             </div>
-            <button type="submit" class="btn btn-primary" style="margin-top:0.2rem;">Создать аккаунт</button>
+            <div class="field">
+                <label class="field-label">Код приглашения</label>
+                <input type="text" name="invite_code" placeholder="получите у учителя или админа">
+                <p class="muted">
+                    Первый зарегистрированный пользователь в системе становится админом и может выдавать коды.
+                    Для всех остальных регистраций код обязателен.
+                </p>
+            </div>
+            <button type="submit" class="btn btn-primary">Создать аккаунт</button>
         </form>
-        <p class="muted" style="margin-top:0.9rem;">
-            Уже есть аккаунт? <a href="/ui/login">Войти</a>
+
+        <p class="muted" style="margin-top:0.7rem;">
+            Уже есть аккаунт?
+            <a href="/ui/login">Войти</a>
         </p>
-    </div>
+    </section>
 </div>
 {% endblock %}
