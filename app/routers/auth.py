@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Form, Response
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.models import User
 from app.security import hash_password, verify_password, create_token
@@ -41,6 +42,20 @@ def login(
     token = create_token({"id": user.id, "role": user.role})
     response.set_cookie("access_token", token, httponly=True)
     return {"ok": True, "role": user.role}
+
+
+@router.post("/token")
+def issue_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """
+    OAuth2-compatible token endpoint for Swagger/clients.
+    Accepts username/password, returns bearer token.
+    """
+    user = db.query(User).filter(User.email == form_data.username).first()
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Invalid credentials")
+
+    token = create_token({"id": user.id, "role": user.role})
+    return {"access_token": token, "token_type": "bearer"}
 
 
 @router.get("/me")
