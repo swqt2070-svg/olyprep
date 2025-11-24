@@ -53,7 +53,7 @@
                     <summary class="lib-summary">
                         <strong>Категория:</strong> {{ category }}
                     </summary>
-
+            
                     {# Класс #}
                     {% for grade, years in grades|dictsort %}
                     <details class="lib-level lib-grade">
@@ -61,7 +61,7 @@
                             <strong>Класс:</strong>
                             {% if grade == 0 %}&mdash;{% else %}{{ grade }}{% endif %}
                         </summary>
-
+            
                         {# Год #}
                         {% for year_code, stages in years|dictsort %}
                         {% set code = year_code|string %}
@@ -72,19 +72,19 @@
                         {% else %}
                             {% set year_label = code %}
                         {% endif %}
-
+            
                         <details class="lib-level lib-year">
                             <summary class="lib-summary">
                                 <strong>Год:</strong> {{ year_label or '—' }}
                             </summary>
-
+            
                             {# Этап #}
                             {% for stage, questions in stages|dictsort %}
                             <details class="lib-level lib-stage">
                                 <summary class="lib-summary">
                                     <strong>Этап:</strong> {{ stage or '—' }}
                                 </summary>
-
+            
                                 <div class="question-list">
                                     {% for q in questions %}
                                     {% set tq = selected.get(q.id) if selected else None %}
@@ -111,19 +111,20 @@
                                     </label>
                                     {% endfor %}
                                 </div>
-
+            
                             </details>
                             {% endfor %}
-
+            
                         </details>
                         {% endfor %}
-
+            
                     </details>
                     {% endfor %}
-
+            
                 </details>
                 {% endfor %}
             </div>
+            
             {% else %}
                 <p class="muted">Пока нет доступных задач в библиотеке.</p>
             {% endif %}
