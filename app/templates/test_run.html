@@ -37,15 +37,11 @@
                 </div>
 
                 {% set answer_type = question.answer_type | default('text') %}
-                {% set is_multiple = (answer_type == 'multiple') %}
-                {% if answers|length > 0 and answer_type != 'text' %}
+                {% set is_multiple = (answer_type == 'multiple' or answer_type == 'multi') %}
+                {% if answers|length > 0 and answer_type != 'text' and answer_type != 'number' %}
                     <div class="field">
                         <label class="field-label">
-                            {% if is_multiple %}
-                                Выберите один или несколько вариантов
-                            {% else %}
-                                Выберите один вариант
-                            {% endif %}
+                            {% if is_multiple %}Выберите один или несколько вариантов{% else %}Выберите один вариант{% endif %}
                         </label>
 
                         <div class="answers-list">
@@ -64,15 +60,16 @@
                                         {% endif %}
                                     >
                                     <span class="answer-option-text">
-                                        {% if answers_html %}
-                                            {{ answers_html[loop.index0] | safe }}
-                                        {% else %}
-                                            {{ opt.text }}
-                                        {% endif %}
+                                        {% if answers_html %}{{ answers_html[loop.index0] | safe }}{% else %}{{ opt.text }}{% endif %}
                                     </span>
                                 </label>
                             {% endfor %}
                         </div>
+                    </div>
+                {% elif answer_type == 'number' %}
+                    <div class="field">
+                        <label class="field-label" for="answer_text">Введите число</label>
+                        <input type="number" step="any" name="answer_text" class="field-input" value="{{ answer_text | default('') }}">
                     </div>
                 {% else %}
                     <div class="field">
@@ -185,6 +182,15 @@
         box-shadow: 0 0 0 1px rgba(124, 107, 255, 0.5);
     }
 
+    .page-test-run .field-input {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(7,11,25,0.9);
+        padding: 10px 12px;
+        color: #fff;
+    }
+
     .page-test-run .answers-list {
         display: flex;
         flex-direction: column;
@@ -202,9 +208,7 @@
         border: 1px solid transparent;
     }
 
-    .page-test-run .answer-option input {
-        margin-top: 3px;
-    }
+    .page-test-run .answer-option input { margin-top: 3px; }
 
     .page-test-run .answer-option-text {
         font-size: 14px;
@@ -216,24 +220,9 @@
         background: rgba(255,255,255,0.03);
     }
 
-    .page-test-run .test-run-footer {
-        margin-top: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-
-    .page-test-run .test-run-nav {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        align-items: center;
-    }
-
-    .page-test-run .btn-ghost-active {
-        border-color: rgba(255,255,255,0.7);
-        background: rgba(255,255,255,0.08);
-    }
+    .page-test-run .test-run-footer { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
+    .page-test-run .test-run-nav { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .page-test-run .btn-ghost-active { border-color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.08); }
 
     @media (max-width: 768px) {
         .page-test-run .card-test-run { padding: 20px 16px; }
