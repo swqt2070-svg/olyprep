@@ -1566,9 +1566,9 @@ async def test_view(
         if not text:
             return ""
         # преобразуем ![](url) в img, допускаем пробелы вокруг url
-        text = re.sub(r"!\[[^\]]*\]\(\s*([^)]+?)\s*\)", r'<img src="\1" style="max-width:100%;height:auto;">', text)
-        text = text.replace("\n", "<br>")
-        return text
+        html = re.sub(r"!\[[^\]]*\]\(\s*([^)]+?)\s*\)", r'<img src="\1" style="max-width:100%;height:auto;">', text)
+        html = html.replace("\n", "<br>")
+        return html
 
     return templates.TemplateResponse(
         "test_run.html",
@@ -1578,9 +1578,9 @@ async def test_view(
             "test": test,
             "items": items,
             "question": question,
-            "question_html": md_to_html(question.text if hasattr(question, "text") else "") or (getattr(question, "text", "") or ""),
+            "question_html": md_to_html(str(getattr(question, "text", "") or "")),
             "answers": answers_list,
-            "answers_html": [md_to_html(getattr(a, "text", str(a))) or getattr(a, "text", str(a)) for a in answers_list] if answers_list else None,
+            "answers_html": [md_to_html(str(getattr(a, "text", "") or "")) for a in answers_list] if answers_list else None,
             "index": 0,
             "total_questions": len(items),
             "state_json": "",
