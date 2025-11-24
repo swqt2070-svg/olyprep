@@ -1087,6 +1087,16 @@ async def test_builder_new(
     user: User = Depends(require_role("admin", "teacher")),
 ):
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
+    library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
+    for q in questions:
+        category = q.category or "Без категории"
+        try:
+            grade = int(q.grade) if q.grade is not None else 0
+        except (TypeError, ValueError):
+            grade = 0
+        year = q.year or ""
+        stage = q.stage or ""
+        library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
     return templates.TemplateResponse(
         "test_builder.html",
         {
@@ -1095,6 +1105,7 @@ async def test_builder_new(
             "mode": "create",
             "test": None,
             "questions": questions,
+            "library": library,
             "selected": {},
         },
     )
@@ -1144,6 +1155,7 @@ async def test_builder_new_post(
                 "mode": "create",
                 "test": None,
                 "questions": questions,
+                "library": {},
                 "selected": {},
                 "max_attempts": max_attempts,
                 "error": error,
@@ -1188,6 +1200,16 @@ async def test_builder_edit(
         raise HTTPException(status_code=404, detail="test not found")
 
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
+    library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
+    for q in questions:
+        category = q.category or "Без категории"
+        try:
+            grade = int(q.grade) if q.grade is not None else 0
+        except (TypeError, ValueError):
+            grade = 0
+        year = q.year or ""
+        stage = q.stage or ""
+        library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
     tqs: List[TestQuestion] = (
         db.query(TestQuestion)
         .filter(TestQuestion.test_id == test.id)
@@ -1203,6 +1225,7 @@ async def test_builder_edit(
             "mode": "edit",
             "test": test,
             "questions": questions,
+            "library": library,
             "selected": selected,
         },
     )

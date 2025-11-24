@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
 {% block title %}
-    {% if mode == "create" %}Новый тест{% else %}Редактирование теста{% endif %}
+    {% if mode == "create" %}Создание теста{% else %}Редактирование теста{% endif %}
 {% endblock %}
 
 {% block content %}
 <div class="page-container">
     <h1 class="page-title">
-        {% if mode == "create" %}Создание теста{% else %}Редактирование теста #{{ test.id }}{% endif %}
+        {% if mode == "create" %}Создать тест{% else %}Редактировать тест #{{ test.id }}{% endif %}
     </h1>
 
     <div class="card">
@@ -25,68 +25,119 @@
             </div>
 
             <div class="form-group form-group-inline">
-                <label for="max_attempts">???????? ??????? (0 ? ??? ???????????)</label>
+                <label for="max_attempts">Максимум попыток (0 — без ограничений)</label>
                 <input type="number" id="max_attempts" name="max_attempts" class="input-number" min="0"
-                       value="{{ test.max_attempts if test and test.max_attempts is not none else 0 }}">
+                       value="{{ max_attempts if max_attempts is defined else (test.max_attempts if test and test.max_attempts is not none else 0) }}">
             </div>
             <div class="form-group form-group-inline">
                 <label class="checkbox-label">
                     <input type="checkbox" name="show_correct_answers"
                            {% if test and test.show_correct_answers %}checked{% elif not test %}checked{% endif %}>
-                    Показывать правильные ответы после сдачи
+                    Показывать правильные ответы после завершения теста
                 </label>
             </div>
 
             <hr>
 
-            <h2 class="section-title">Выбор задач из библиотеки</h2>
+            <h2 class="section-title">Выберите вопросы из библиотеки</h2>
             <p class="section-hint">
-                Отметь задачи, которые войдут в тест, и задай количество баллов за каждую.
+                Отметьте чекбокс, чтобы добавить вопрос в тест, и укажите баллы за него.
             </p>
 
-            <div class="table-wrapper">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th style="width: 40px;">✓</th>
-                            <th style="width: 60px;">ID</th>
-                            <th>Текст задачи</th>
-                            <th style="width: 120px;">Баллы</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    {% for q in questions %}
-                        {% set tq = selected.get(q.id) if selected else None %}
-                        <tr>
-                            <td class="text-center">
-                                <input type="checkbox"
-                                       name="q_{{ q.id }}_include"
-                                       {% if tq %}checked{% endif %}>
-                            </td>
-                            <td>{{ q.id }}</td>
-                            <td class="question-text-cell">
-                                {{ q.text | truncate(160, True, '…') }}
-                            </td>
-                            <td>
-                                <input type="number"
-                                       class="input-number"
-                                       name="q_{{ q.id }}_points"
-                                       min="0"
-                                       value="{{ tq.points if tq else 1 }}">
-                            </td>
-                        </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+            {% if library %}
+                {% for category, grades in library|dictsort %}
+                    <div class="card" style="margin-bottom:1rem;">
+                        <h3 style="font-size:1rem; margin-bottom:0.35rem;">Категория: {{ category }}</h3>
+                        {% for grade, years in grades|dictsort %}
+                            <div style="margin-left:0.75rem; margin-bottom:0.4rem;">
+                                <strong>Класс:</strong> {% if grade == 0 %}—{% else %}{{ grade }}{% endif %}
+                            </div>
+                            {% for year_code, stages in years|dictsort %}
+                                <div style="margin-left:1.5rem; margin-bottom:0.4rem;">
+                                    <strong>Год:</strong> {{ year_code or '—' }}
+                                </div>
+                                {% for stage, questions_list in stages|dictsort %}
+                                    <div style="margin-left:2.25rem; margin-bottom:0.35rem;">
+                                        <strong>Этап:</strong> {{ stage or '—' }}
+                                    </div>
+                                    {% for q in questions_list %}
+                                        {% set tq = selected.get(q.id) if selected else None %}
+                                        <div class="builder-question-row">
+                                            <label class="builder-checkbox">
+                                                <input type="checkbox" name="q_{{ q.id }}_include" {% if tq %}checked{% endif %}>
+                                                <span class="builder-id">#{{ q.id }}</span>
+                                                <span class="builder-text">{{ q.text | truncate(180, True, '…') }}</span>
+                                            </label>
+                                            <div class="builder-points">
+                                                <label>Баллы</label>
+                                                <input type="number" class="input-number" name="q_{{ q.id }}_points" min="0" value="{{ tq.points if tq else 1 }}">
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                {% endfor %}
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="muted">Пока нет вопросов в библиотеке.</p>
+            {% endif %}
 
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">
                     {% if mode == "create" %}Создать тест{% else %}Сохранить изменения{% endif %}
                 </button>
-                <a href="/ui/tests" class="btn btn-secondary">К списку тестов</a>
+                <a href="/ui/tests" class="btn btn-ghost">Назад к тестам</a>
             </div>
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .builder-question-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px solid rgba(148,163,184,0.15);
+        border-radius: 10px;
+        margin: 6px 0 12px 2.25rem;
+        background: rgba(15,23,42,0.4);
+    }
+
+    .builder-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+    }
+
+    .builder-checkbox input {
+        transform: scale(1.1);
+    }
+
+    .builder-id {
+        font-weight: 600;
+        color: #cbd5f5;
+        min-width: 60px;
+    }
+
+    .builder-text {
+        color: #e5e7eb;
+    }
+
+    .builder-points {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .builder-points label {
+        font-size: 0.82rem;
+        color: #aeb4c5;
+    }
+</style>
 {% endblock %}
