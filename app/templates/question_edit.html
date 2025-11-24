@@ -1,137 +1,149 @@
 {% extends "base.html" %}
-{% block title %}Редактирование задачи #{{ question.id }}{% endblock %}
+{% block title %}Редактирование вопроса #{{ question.id }}{% endblock %}
 
 {% block content %}
 <div class="page-header d-flex justify-content-between align-items-center mb-3">
-    <h1 class="mb-0">Редактирование задачи #{{ question.id }}</h1>
-    <a href="/ui/questions" class="btn btn-outline-light">К списку задач</a>
+    <h1 class="mb-0">Редактирование вопроса #{{ question.id }}</h1>
+    <a href="/ui/questions" class="btn btn-outline-light">← К списку вопросов</a>
 </div>
 
-{% if error %}
-<div class="alert alert-danger">{{ error }}</div>
-{% endif %}
-{% if success %}
-<div class="alert alert-success">{{ success }}</div>
-{% endif %}
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
 
 <div class="question-edit-wrapper">
     <div class="card card-dark shadow-sm">
         <div class="card-body">
             <form method="post" class="question-edit-form">
-                <!-- основная сетка: слева текст и ответы, справа картинка/мета -->
                 <div class="row g-4">
                     <div class="col-lg-8 col-md-7 col-12">
 
                         <div class="mb-3">
-                            <label class="form-label">Текст задачи *</label>
-                            <textarea name="text"
-                                      class="form-control question-text"
-                                      required>{{ question.text }}</textarea>
+                            <label class="form-label">Текст вопроса *</label>
+                            <div class="input-with-image">
+                                <textarea name="text"
+                                          class="form-control question-text"
+                                          data-img-target
+                                          required>{{ question.text }}</textarea>
+                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
+                            </div>
                         </div>
 
                         <div class="mb-3">
                             <label class="form-label" for="answer_type">Тип ответа *</label>
                             <select id="answer_type" name="answer_type" class="form-select">
-                                <option value="text"
-                                    {% if question.answer_type == 'text' %}selected{% endif %}>
-                                    Написать текст
-                                </option>
-                                <option value="single"
-                                    {% if question.answer_type == 'single' %}selected{% endif %}>
-                                    Выбрать один
-                                </option>
+                                <option value="text" {% if question.answer_type == 'text' %}selected{% endif %}>Открытый текст</option>
+                                <option value="single" {% if question.answer_type == 'single' %}selected{% endif %}>Один вариант</option>
+                                <option value="multi" {% if question.answer_type == 'multi' %}selected{% endif %}>Несколько вариантов</option>
+                                <option value="number" {% if question.answer_type == 'number' %}selected{% endif %}>Числовой ответ</option>
                             </select>
                         </div>
 
-                        <!-- Блок: текстовый ответ -->
                         <div id="block-text" class="mb-3">
                             <label class="form-label">Правильный ответ (текст)</label>
-                            <input type="text"
-                                   name="correct_text"
-                                   class="form-control"
-                                   value="{{ question.correct or '' }}">
-                            <div class="form-text">
-                                Проверка — по строке (без учёта регистра и пробелов по краям).
+                            <div class="input-with-image">
+                                <input type="text"
+                                       name="correct_text"
+                                       class="form-control"
+                                       data-img-target
+                                       value="{{ question.correct or '' }}">
+                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
                             </div>
                         </div>
 
-                        <!-- Блок: выбрать один вариант -->
                         <div id="block-single" class="mb-3">
                             <label class="form-label">Варианты ответа</label>
-
                             <div class="table-responsive">
                                 <table class="table table-dark table-sm align-middle mb-0">
-                                    <thead>
-                                    <tr>
-                                        <th style="width: 70px;">Верный</th>
-                                        <th>Текст варианта</th>
-                                    </tr>
-                                    </thead>
+                                    <thead><tr><th style="width:70px;">Верный</th><th>Вариант</th></tr></thead>
                                     <tbody>
                                     {% for opt in options %}
                                     <tr>
                                         <td class="text-center">
-                                            <input type="radio"
-                                                   name="correct_index"
-                                                   value="{{ loop.index0 }}"
-                                                {% if correct_index is not none and loop.index0 == correct_index %}
-                                                   checked
-                                                {% endif %}>
+                                            <input type="radio" name="correct_index" value="{{ loop.index0 }}"
+                                                {% if correct_index is not none and loop.index0 == correct_index %}checked{% endif %}>
                                         </td>
                                         <td>
-                                            <input type="text"
-                                                   name="option_{{ loop.index0 }}"
-                                                   class="form-control"
-                                                   value="{{ opt }}">
+                                            <div class="input-with-image">
+                                                <input type="text" name="option_{{ loop.index0 }}" class="form-control" data-img-target value="{{ opt }}">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
+                                            </div>
                                         </td>
                                     </tr>
                                     {% endfor %}
-
-                                    {# несколько пустых строк для новых вариантов #}
                                     {% for i in range(options|length, options|length + 3) %}
                                     <tr>
-                                        <td class="text-center">
-                                            <input type="radio" name="correct_index" value="{{ i }}">
-                                        </td>
+                                        <td class="text-center"><input type="radio" name="correct_index" value="{{ i }}"></td>
                                         <td>
-                                            <input type="text"
-                                                   name="option_{{ i }}"
-                                                   class="form-control"
-                                                   value="">
+                                            <div class="input-with-image">
+                                                <input type="text" name="option_{{ i }}" class="form-control" data-img-target value="">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
+                                            </div>
                                         </td>
                                     </tr>
                                     {% endfor %}
                                     </tbody>
                                 </table>
                             </div>
-                            <div class="form-text mt-1">
-                                Отметь один правильный вариант. Пустые строки в конце будут отброшены.
+                        </div>
+
+                        <div id="block-multi" class="mb-3">
+                            <label class="form-label">Варианты ответа (несколько верных)</label>
+                            <div class="table-responsive">
+                                <table class="table table-dark table-sm align-middle mb-0">
+                                    <thead><tr><th style="width:70px;">Верный</th><th>Вариант</th></tr></thead>
+                                    <tbody>
+                                    {% for opt in options %}
+                                    <tr>
+                                        <td class="text-center">
+                                            <input type="checkbox" name="correct_multi" value="{{ loop.index0 }}"
+                                                {% if correct_multi and loop.index0 in correct_multi %}checked{% endif %}>
+                                        </td>
+                                        <td>
+                                            <div class="input-with-image">
+                                                <input type="text" name="option_{{ loop.index0 }}" class="form-control" data-img-target value="{{ opt }}">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    {% for i in range(options|length, options|length + 3) %}
+                                    <tr>
+                                        <td class="text-center"><input type="checkbox" name="correct_multi" value="{{ i }}"></td>
+                                        <td>
+                                            <div class="input-with-image">
+                                                <input type="text" name="option_{{ i }}" class="form-control" data-img-target value="">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div id="block-number" class="mb-3">
+                            <label class="form-label">Правильное число</label>
+                            <div class="input-with-image">
+                                <input type="number" step="any" name="correct_number" class="form-control" data-img-target value="{{ correct_number or '' }}">
+                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
                             </div>
                         </div>
 
                         <div class="mt-4">
-                            <button type="submit" class="btn btn-primary">
-                                Сохранить изменения
-                            </button>
+                            <button type="submit" class="btn btn-primary">Сохранить изменения</button>
                         </div>
                     </div>
 
-                    <!-- правая колонка: картинка + мета -->
                     <div class="col-lg-4 col-md-5 col-12">
                         {% if question.image_path %}
                         <div class="mb-3">
-                            <label class="form-label">Изображение задачи</label>
+                            <label class="form-label">Картинка вопроса</label>
                             <div class="question-image-preview">
-                                <img src="{{ question.image_path }}"
-                                     alt="Изображение задачи"
-                                     class="img-fluid rounded">
-                            </div>
-                            <div class="form-text mt-1">
-                                Картинка подтягивается автоматически из импорта Obsidian.
+                                <img src="{{ question.image_path }}" alt="Картинка вопроса" class="img-fluid rounded">
                             </div>
                         </div>
                         {% endif %}
-
                         <div class="mb-2 small text-muted">
                             <div><strong>Категория:</strong> {{ question.category or "—" }}</div>
                             <div><strong>Класс:</strong> {{ question.grade or "—" }}</div>
@@ -146,64 +158,61 @@
 </div>
 
 <style>
-    .question-edit-wrapper {
-        max-width: 1100px;
-        margin: 0 auto 40px auto;
-    }
-    .card-dark {
-        background: rgba(255,255,255,0.03);
-        border-radius: 18px;
-        border: 1px solid rgba(255,255,255,0.06);
-    }
-    .question-edit-form .question-text {
-        width: 100%;
-        min-height: 260px;
-        resize: vertical;
-        font-family: inherit;
-        font-size: 0.95rem;
-        line-height: 1.5;
-    }
-    .question-image-preview {
-        max-height: 320px;
-        overflow: hidden;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.12);
-    }
-    .question-image-preview img {
-        width: 100%;
-        height: auto;
-        object-fit: contain;
-        display: block;
-    }
-    @media (max-width: 992px) {
-        .question-edit-wrapper {
-            max-width: 100%;
-            padding: 0 1rem;
-        }
-    }
+    .question-edit-wrapper { max-width: 1100px; margin: 0 auto 40px auto; }
+    .card-dark { background: rgba(255,255,255,0.03); border-radius: 18px; border: 1px solid rgba(255,255,255,0.06); }
+    .question-edit-form .question-text { width: 100%; min-height: 240px; resize: vertical; font-family: inherit; }
+    .question-image-preview { max-height: 320px; overflow: hidden; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); }
+    .question-image-preview img { width: 100%; height: auto; object-fit: contain; display: block; }
+    .input-with-image { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .input-with-image .add-image-btn { white-space: nowrap; }
+    @media (max-width: 992px) { .question-edit-wrapper { max-width: 100%; padding: 0 1rem; } .input-with-image { flex-direction: column; align-items: stretch; } .input-with-image .add-image-btn { width: 100%; } }
 </style>
 
 <script>
 (function() {
     const selectType = document.getElementById('answer_type');
-    const blockText = document.getElementById('block-text');
-    const blockSingle = document.getElementById('block-single');
-
+    const blocks = {
+        text: document.getElementById('block-text'),
+        single: document.getElementById('block-single'),
+        multi: document.getElementById('block-multi'),
+        number: document.getElementById('block-number'),
+    };
     function updateBlocks() {
-        if (!selectType) return;
-        if (selectType.value === 'single') {
-            blockSingle.style.display = '';
-            blockText.style.display = 'none';
-        } else {
-            blockText.style.display = '';
-            blockSingle.style.display = 'none';
-        }
+        const val = selectType ? selectType.value : 'text';
+        Object.entries(blocks).forEach(([k, el]) => { if (el) el.style.display = k === val ? '' : 'none'; });
+    }
+    updateBlocks();
+    if (selectType) selectType.addEventListener('change', updateBlocks);
+
+    async function uploadAndInsert(target) {
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        return new Promise((resolve) => {
+            fileInput.onchange = async () => {
+                const file = fileInput.files?.[0];
+                if (!file) return resolve();
+                const fd = new FormData();
+                fd.append('file', file);
+                const res = await fetch('/ui/upload-image', { method: 'POST', body: fd });
+                if (!res.ok) return resolve();
+                const data = await res.json();
+                const url = data.url;
+                if (url) {
+                    const append = target.value && !target.value.endsWith(' ') ? ' ' : '';
+                    target.value = target.value + append + `![](${url})`;
+                }
+                resolve();
+            };
+            fileInput.click();
+        });
     }
 
-    updateBlocks();
-    if (selectType) {
-        selectType.addEventListener('change', updateBlocks);
-    }
+    document.querySelectorAll('.add-image-btn').forEach((btn) => {
+        const target = btn.parentElement.querySelector('[data-img-target]');
+        if (!target) return;
+        btn.addEventListener('click', () => uploadAndInsert(target));
+    });
 })();
 </script>
 {% endblock %}

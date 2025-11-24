@@ -1,4 +1,4 @@
-from fastapi import (
+﻿from fastapi import (
     APIRouter,
     Depends,
     Request,
@@ -8,7 +8,7 @@ from fastapi import (
     UploadFile,
     File,
 )
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -17,6 +17,9 @@ import io
 import zipfile
 import re
 import json
+from pathlib import Path
+from uuid import uuid4
+import os
 
 from app.deps import get_db, get_current_user, require_role, require_teacher_or_admin
 from app.models import User, Question, Test, TestQuestion, Submission, Answer
@@ -29,10 +32,34 @@ templates = Jinja2Templates(directory="app/templates")
 
 STUDENT_INVITE_CODE = "STUDENT2025"
 TEACHER_INVITE_CODE = "TEACHER2025"
+BASE_DIR = Path(__file__).resolve().parent.parent
+UPLOAD_DIR = BASE_DIR / "static" / "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 def redirect(url: str) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ---------- UPLOADS ----------
+
+
+@router.post("/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    if not file or not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Можно загружать только изображения")
+
+    ext = Path(file.filename or "").suffix.lower()
+    if not ext:
+        ext = ".img"
+    filename = f"{uuid4().hex}{ext}"
+    dest = UPLOAD_DIR / filename
+
+    data = await file.read()
+    dest.write_bytes(data)
+
+    url = f"/static/uploads/{filename}"
+    return JSONResponse({"url": url})
 
 
 # ---------- ВСПОМОГАТЕЛЬНОЕ: контекст ЛК ----------
@@ -793,29 +820,55 @@ async def question_new_submit(
     answer_type: str = Form(...),
     correct_text: str = Form(""),
     correct_index: str = Form(""),
+    correct_number: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "teacher")),
 ):
     form = await request.form()
     error: Optional[str] = None
-
     answer_type = answer_type.strip()
-    raw_options: List[str] = []
 
-    if answer_type not in ("text", "single"):
-        error = "Неверный тип ответа."
+    def collect_options(form_data):
+        entries = []
+        for k in form_data.keys():
+            m = re.match(r"option_(\d+)", k)
+            if m:
+                idx = int(m.group(1))
+                entries.append((idx, (form_data.get(k) or "").strip()))
+        entries.sort(key=lambda x: x[0])
+        opts = [v for _, v in entries]
+        while opts and not opts[-1]:
+            opts.pop()
+        return opts
+
+    options = collect_options(form)
+
+    if answer_type not in ("text", "single", "multi", "number"):
+        error = "Неподдерживаемый тип ответа."
     elif answer_type == "text":
         if not correct_text.strip():
             error = "Укажите правильный текстовый ответ."
-    elif answer_type == "single":
-        for idx in range(4):
-            val = form.get(f"option_{idx}", "").strip()
-            if val:
-                raw_options.append(val)
-        if not raw_options:
-            error = "Укажите хотя бы один вариант ответа."
-        elif correct_index == "":
-            error = "Выберите, какой вариант считать правильным."
+    elif answer_type in ("single", "multi"):
+        if len(options) < 2:
+            error = "Добавьте хотя бы два варианта ответа."
+        elif answer_type == "single" and correct_index == "":
+            error = "Отметьте правильный вариант."
+        elif answer_type == "multi":
+            try:
+                correct_multi = [int(x) for x in form.getlist("correct_multi")]
+            except Exception:
+                correct_multi = []
+            correct_multi = [i for i in correct_multi if 0 <= i < len(options)]
+            if not correct_multi:
+                error = "Отметьте хотя бы один правильный вариант."
+    elif answer_type == "number":
+        if not correct_number.strip():
+            error = "Укажите правильное число."
+        else:
+            try:
+                float(correct_number.strip())
+            except ValueError:
+                error = "Числовой ответ должен быть числом."
 
     if error:
         return templates.TemplateResponse(
@@ -829,12 +882,24 @@ async def question_new_submit(
             status_code=400,
         )
 
+    options_json = None
+    correct = None
+
     if answer_type == "text":
-        options_json = None
         correct = correct_text.strip()
-    else:
-        options_json = json.dumps(raw_options, ensure_ascii=False)
-        correct = correct_index
+    elif answer_type == "number":
+        correct = correct_number.strip()
+    elif answer_type == "multi":
+        options_json = json.dumps(options, ensure_ascii=False) if options else None
+        try:
+            correct_multi = [int(x) for x in form.getlist("correct_multi")]
+        except Exception:
+            correct_multi = []
+        correct_multi = [i for i in correct_multi if 0 <= i < len(options)]
+        correct = json.dumps(sorted(set(correct_multi)), ensure_ascii=False)
+    elif answer_type == "single":
+        options_json = json.dumps(options, ensure_ascii=False) if options else None
+        correct = str(correct_index)
 
     q = Question(
         text=text,
@@ -851,9 +916,10 @@ async def question_new_submit(
             "request": request,
             "user": user,
             "error": None,
-            "success": f"Задача успешно сохранена. ID: {q.id}",
+            "success": f"Вопрос успешно сохранён. ID: {q.id}",
         },
     )
+
 @router.get("/questions/{question_id}/edit", response_class=HTMLResponse)
 async def question_edit(
     request: Request,
@@ -865,22 +931,29 @@ async def question_edit(
     if not q:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    # варианты и индекс правильного варианта
     options = []
     correct_index = None
+    correct_multi: list[int] = []
+    correct_number = None
 
-    if q.answer_type == "single" and q.options:
+    if q.options:
         try:
             options = json.loads(q.options)
         except Exception:
             options = []
-        if q.correct is not None:
-            try:
-                correct_index = int(str(q.correct))
-            except ValueError:
-                correct_index = None
+    if q.answer_type == "single" and q.correct is not None:
+        try:
+            correct_index = int(str(q.correct))
+        except ValueError:
+            correct_index = None
+    if q.answer_type == "multi" and q.correct:
+        try:
+            correct_multi = json.loads(q.correct) if q.correct else []
+        except Exception:
+            correct_multi = []
+    if q.answer_type == "number":
+        correct_number = q.correct
 
-    # чтобы в форме всегда было минимум 4 строки под варианты
     while len(options) < 4:
         options.append("")
 
@@ -892,6 +965,8 @@ async def question_edit(
             "question": q,
             "options": options,
             "correct_index": correct_index,
+            "correct_multi": correct_multi,
+            "correct_number": correct_number,
             "error": None,
             "success": None,
         },
@@ -913,31 +988,31 @@ async def question_edit_post(
     text = (form.get("text") or "").strip()
     answer_type = (form.get("answer_type") or "text").strip()
 
+    def collect_options(form_data):
+        entries = []
+        for k in form_data.keys():
+            m = re.match(r"option_(\d+)", k)
+            if m:
+                idx = int(m.group(1))
+                entries.append((idx, (form_data.get(k) or "").strip()))
+        entries.sort(key=lambda x: x[0])
+        opts = [v for _, v in entries]
+        while opts and not opts[-1]:
+            opts.pop()
+        return opts
+
     if not text:
-        # переотображаем форму с ошибкой
-        options = []
-        correct_index = None
-        if q.answer_type == "single" and q.options:
-            try:
-                options = json.loads(q.options)
-            except Exception:
-                options = []
-            if q.correct is not None:
-                try:
-                    correct_index = int(str(q.correct))
-                except ValueError:
-                    correct_index = None
-        while len(options) < 4:
-            options.append("")
         return templates.TemplateResponse(
             "question_edit.html",
             {
                 "request": request,
                 "user": user,
                 "question": q,
-                "options": options,
-                "correct_index": correct_index,
-                "error": "Текст задачи не может быть пустым",
+                "options": collect_options(form),
+                "correct_index": None,
+                "correct_multi": [],
+                "correct_number": None,
+                "error": "Текст вопроса обязателен",
                 "success": None,
             },
         )
@@ -946,51 +1021,149 @@ async def question_edit_post(
     q.answer_type = answer_type
 
     if answer_type == "text":
-        # просто текстовый ответ
         q.correct = (form.get("correct_text") or "").strip()
         q.options = None
-    else:
-        # собираем варианты
-        options = []
-        idx = 0
-        while True:
-            key = f"option_{idx}"
-            if key not in form:
-                break
-            value = (form.get(key) or "").strip()
-            options.append(value)
-            idx += 1
-
-        # убираем пустые варианты в конце
-        while options and not options[-1]:
-            options.pop()
-
+    elif answer_type == "number":
+        num_raw = (form.get("correct_number") or "").strip()
+        if not num_raw:
+            return templates.TemplateResponse(
+                "question_edit.html",
+                {
+                    "request": request,
+                    "user": user,
+                    "question": q,
+                    "options": collect_options(form),
+                    "correct_index": None,
+                    "correct_multi": [],
+                    "correct_number": None,
+                    "error": "Укажите правильное число",
+                    "success": None,
+                },
+                status_code=400,
+            )
+        try:
+            float(num_raw)
+        except ValueError:
+            return templates.TemplateResponse(
+                "question_edit.html",
+                {
+                    "request": request,
+                    "user": user,
+                    "question": q,
+                    "options": collect_options(form),
+                    "correct_index": None,
+                    "correct_multi": [],
+                    "correct_number": None,
+                    "error": "Числовой ответ должен быть числом",
+                    "success": None,
+                },
+                status_code=400,
+            )
+        q.correct = num_raw
+        q.options = None
+    elif answer_type in ("single", "multi"):
+        options = collect_options(form)
+        if len(options) < 2:
+            return templates.TemplateResponse(
+                "question_edit.html",
+                {
+                    "request": request,
+                    "user": user,
+                    "question": q,
+                    "options": options,
+                    "correct_index": None,
+                    "correct_multi": [],
+                    "correct_number": None,
+                    "error": "Добавьте хотя бы два варианта ответа",
+                    "success": None,
+                },
+                status_code=400,
+            )
         q.options = json.dumps(options, ensure_ascii=False) if options else None
-
-        # индекс правильного варианта
-        correct_raw = form.get("correct_index")
-        if correct_raw is not None and correct_raw != "":
+        if answer_type == "single":
+            correct_raw = form.get("correct_index")
+            if correct_raw is None or correct_raw == "":
+                return templates.TemplateResponse(
+                    "question_edit.html",
+                    {
+                        "request": request,
+                        "user": user,
+                        "question": q,
+                        "options": options,
+                        "correct_index": None,
+                        "correct_multi": [],
+                        "correct_number": None,
+                        "error": "Отметьте правильный вариант",
+                        "success": None,
+                    },
+                    status_code=400,
+                )
             q.correct = str(correct_raw)
         else:
-            q.correct = None
+            try:
+                correct_multi = [int(x) for x in form.getlist("correct_multi")]
+            except Exception:
+                correct_multi = []
+            correct_multi = [i for i in correct_multi if 0 <= i < len(options)]
+            if not correct_multi:
+                return templates.TemplateResponse(
+                    "question_edit.html",
+                    {
+                        "request": request,
+                        "user": user,
+                        "question": q,
+                        "options": options,
+                        "correct_index": None,
+                        "correct_multi": [],
+                        "correct_number": None,
+                        "error": "Отметьте хотя бы один правильный вариант",
+                        "success": None,
+                    },
+                    status_code=400,
+                )
+            q.correct = json.dumps(sorted(set(correct_multi)), ensure_ascii=False)
+    else:
+        return templates.TemplateResponse(
+            "question_edit.html",
+            {
+                "request": request,
+                "user": user,
+                "question": q,
+                "options": [],
+                "correct_index": None,
+                "correct_multi": [],
+                "correct_number": None,
+                "error": "Неподдерживаемый тип ответа",
+                "success": None,
+            },
+            status_code=400,
+        )
 
     db.add(q)
     db.commit()
     db.refresh(q)
 
-    # готовим данные для повторного отображения формы
     options = []
     correct_index = None
-    if q.answer_type == "single" and q.options:
+    correct_multi = []
+    correct_number = None
+    if q.options:
         try:
             options = json.loads(q.options)
         except Exception:
             options = []
-        if q.correct is not None:
-            try:
-                correct_index = int(str(q.correct))
-            except ValueError:
-                correct_index = None
+    if q.answer_type == "single" and q.correct is not None:
+        try:
+            correct_index = int(str(q.correct))
+        except ValueError:
+            correct_index = None
+    if q.answer_type == "multi" and q.correct:
+        try:
+            correct_multi = json.loads(q.correct) if q.correct else []
+        except Exception:
+            correct_multi = []
+    if q.answer_type == "number":
+        correct_number = q.correct
     while len(options) < 4:
         options.append("")
 
@@ -1002,11 +1175,12 @@ async def question_edit_post(
             "question": q,
             "options": options,
             "correct_index": correct_index,
+            "correct_multi": correct_multi,
+            "correct_number": correct_number,
             "error": None,
             "success": "Изменения сохранены",
         },
     )
-
 
 @router.post("/questions/{question_id}/delete", response_class=HTMLResponse)
 async def question_delete(
@@ -1735,3 +1909,6 @@ async def submission_set_points(
     db.commit()
 
     return RedirectResponse(url=f"/ui/submissions/{submission_id}", status_code=303)
+
+
+

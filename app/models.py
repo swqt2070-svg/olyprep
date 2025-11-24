@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import (
@@ -45,10 +45,10 @@ class User(Base):
 
 
 class AnswerType(str):
-    SINGLE = "single"   # один правильный вариант
-    MULTI = "multi"     # несколько правильных вариантов
-    TEXT = "text"       # текстовый ответ
-
+    SINGLE = "single"
+    MULTI = "multi"
+    TEXT = "text"
+    NUMBER = "number"
 
 class Question(Base):
     __tablename__ = "questions"
@@ -58,7 +58,7 @@ class Question(Base):
 
     # ??? ??????
     answer_type: Mapped[str] = Column(
-        Enum(AnswerType.SINGLE, AnswerType.MULTI, AnswerType.TEXT, name="answer_types"),
+        Enum(AnswerType.SINGLE, AnswerType.MULTI, AnswerType.TEXT, AnswerType.NUMBER, name="answer_types"),
         nullable=False,
         default=AnswerType.SINGLE,
     )
@@ -109,7 +109,7 @@ class AnswerOption(Base):
     text: Mapped[str] = Column(Text, nullable=False)
     is_correct: Mapped[bool] = Column(Boolean, default=False, nullable=False)
 
-    # картинка для варианта ответа (опционально)
+    # РєР°СЂС‚РёРЅРєР° РґР»СЏ РІР°СЂРёР°РЅС‚Р° РѕС‚РІРµС‚Р° (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
     image_path: Mapped[Optional[str]] = Column(String, nullable=True)
 
     question: Mapped[Question] = relationship("Question", back_populates="option_items")
@@ -127,14 +127,14 @@ class Test(Base):
     )
     created_by: Mapped[Optional[User]] = relationship("User", back_populates="created_tests")
 
-    # настройки теста
+    # РЅР°СЃС‚СЂРѕР№РєРё С‚РµСЃС‚Р°
     is_public: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     show_answers_to_student: Mapped[bool] = Column(Boolean, default=True, nullable=False)
     max_attempts: Mapped[Optional[int]] = Column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
 
-    # привязанные вопросы
+    # РїСЂРёРІСЏР·Р°РЅРЅС‹Рµ РІРѕРїСЂРѕСЃС‹
     questions: Mapped[List["TestQuestion"]] = relationship(
         "TestQuestion",
         back_populates="test",
@@ -160,10 +160,10 @@ class TestQuestion(Base):
         Integer, ForeignKey("questions.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    # порядок в тесте
+    # РїРѕСЂСЏРґРѕРє РІ С‚РµСЃС‚Рµ
     order: Mapped[int] = Column(Integer, nullable=False, default=0)
 
-    # сколько баллов за этот вопрос
+    # СЃРєРѕР»СЊРєРѕ Р±Р°Р»Р»РѕРІ Р·Р° СЌС‚РѕС‚ РІРѕРїСЂРѕСЃ
     points: Mapped[int] = Column(Integer, nullable=False, default=1)
 
     test: Mapped[Test] = relationship("Test", back_populates="questions")
@@ -253,3 +253,4 @@ class Answer(Base):
 
 Submission = TestAttempt
 TestAttemptAnswer = Answer
+

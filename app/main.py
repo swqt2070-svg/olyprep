@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 import jwt
 
 from app.database import Base, engine
@@ -14,6 +16,13 @@ app = FastAPI(title="OlyPrep MVP")
 templates = Jinja2Templates(directory="app/templates")
 
 Base.metadata.create_all(bind=engine)
+
+# static files (for uploads)
+static_dir = Path(__file__).resolve().parent / "static"
+static_dir.mkdir(parents=True, exist_ok=True)
+uploads_dir = static_dir / "uploads"
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 app.add_middleware(
     CORSMiddleware,

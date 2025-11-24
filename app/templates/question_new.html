@@ -1,34 +1,65 @@
 {% extends "base.html" %}
-{% block title %}Новая задача — OlyPrep{% endblock %}
+{% block title %}Новый вопрос — OlyPrep{% endblock %}
 {% block extra_head %}
 <script>
-    function toggleAnswerType() {
-        const checked = document.querySelector('input[name="answer_type"]:checked');
-        const type = checked ? checked.value : 'text';
-        const singleBlock = document.getElementById('single-answer-block');
-        const textBlock = document.getElementById('text-answer-block');
-        if (type === 'single') {
-            singleBlock.style.display = 'block';
-            textBlock.style.display = 'none';
-        } else {
-            singleBlock.style.display = 'none';
-            textBlock.style.display = 'block';
-        }
-    }
-    document.addEventListener('DOMContentLoaded', function() {
-        document.querySelectorAll('input[name="answer_type"]').forEach(function(el) {
-            el.addEventListener('change', toggleAnswerType);
+    async function uploadAndInsert(target) {
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'image/*';
+        return new Promise((resolve) => {
+            fileInput.onchange = async () => {
+                const file = fileInput.files?.[0];
+                if (!file) return resolve();
+                const fd = new FormData();
+                fd.append('file', file);
+                const res = await fetch('/ui/upload-image', { method: 'POST', body: fd });
+                if (!res.ok) return resolve();
+                const data = await res.json();
+                const url = data.url;
+                if (url) {
+                    const append = target.value && !target.value.endsWith(' ') ? ' ' : '';
+                    target.value = target.value + append + `![](${url})`;
+                }
+                resolve();
+            };
+            fileInput.click();
         });
-        toggleAnswerType();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        function currentType() {
+            const checked = document.querySelector('input[name="answer_type"]:checked');
+            return checked ? checked.value : 'text';
+        }
+        const blocks = {
+            text: document.getElementById('text-answer-block'),
+            single: document.getElementById('single-answer-block'),
+            multi: document.getElementById('multi-answer-block'),
+            number: document.getElementById('number-answer-block'),
+        };
+        function toggleBlocks() {
+            const val = currentType();
+            Object.entries(blocks).forEach(([k, el]) => { if (el) el.style.display = k === val ? '' : 'none'; });
+        }
+        toggleBlocks();
+        document.querySelectorAll('input[name="answer_type"]').forEach((el) => {
+            el.addEventListener('change', toggleBlocks);
+        });
+
+        document.querySelectorAll('.add-image-btn').forEach((btn) => {
+            const target = btn.parentElement.querySelector('[data-img-target]');
+            if (!target) return;
+            btn.addEventListener('click', () => uploadAndInsert(target));
+        });
     });
 </script>
 {% endblock %}
 {% block content %}
 <div class="page-header">
     <div>
-        <div class="page-title">Новая задача</div>
+        <div class="page-title">Добавить вопрос</div>
         <div class="page-subtitle">
-            Добавьте задачу в общую библиотеку. Её можно будет использовать в произвольных тестах.
+            Заполните текст, выберите тип ответа и при необходимости добавьте картинку.
         </div>
     </div>
 </div>
@@ -43,28 +74,37 @@
 
     <form method="post" action="/ui/questions/new" class="form">
         <div class="field">
-            <label class="field-label">Текст задачи <span>*</span></label>
-            <textarea name="text" required placeholder="Сформулируйте условие задачи..."></textarea>
+            <label class="field-label">Текст вопроса <span>*</span></label>
+            <div class="input-with-image">
+                <textarea name="text" required placeholder="Введите формулировку..." data-img-target></textarea>
+                <button type="button" class="btn btn-secondary add-image-btn">+ картинка</button>
+            </div>
         </div>
 
         <div class="field">
             <label class="field-label">Тип ответа</label>
             <div class="pill-group">
                 <label class="pill">
-                    <input type="radio" name="answer_type" value="text" checked style="margin-right:0.3rem;">
-                    Текст
+                    <input type="radio" name="answer_type" value="text" checked> Текст
                 </label>
                 <label class="pill">
-                    <input type="radio" name="answer_type" value="single" style="margin-right:0.3rem;">
-                    Один вариант
+                    <input type="radio" name="answer_type" value="single"> Один вариант
+                </label>
+                <label class="pill">
+                    <input type="radio" name="answer_type" value="multi"> Несколько вариантов
+                </label>
+                <label class="pill">
+                    <input type="radio" name="answer_type" value="number"> Число
                 </label>
             </div>
         </div>
 
         <div id="text-answer-block" class="field">
             <label class="field-label">Правильный ответ (текст)</label>
-            <input type="text" name="correct_text" placeholder="Например: Париж">
-            <p class="muted">Сравнение производится без учёта регистра и лишних пробелов.</p>
+            <div class="input-with-image">
+                <input type="text" name="correct_text" placeholder="Ответ" data-img-target>
+                <button type="button" class="btn btn-secondary add-image-btn">+ картинка</button>
+            </div>
         </div>
 
         <div id="single-answer-block" class="field" style="display:none;">
@@ -73,19 +113,50 @@
                 {% for idx in range(4) %}
                 <div class="option-field">
                     <input type="radio" name="correct_index" value="{{ idx }}">
-                    <input type="text" name="option_{{ idx }}" placeholder="Вариант {{ idx + 1 }}">
+                    <div class="input-with-image">
+                        <input type="text" name="option_{{ idx }}" placeholder="Вариант {{ idx + 1 }}" data-img-target>
+                        <button type="button" class="btn btn-secondary add-image-btn">+ картинка</button>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
-            <p class="muted" style="margin-top:0.4rem;">
-                Укажите варианты и выберите один правильный. Пустые варианты будут проигнорированы.
-            </p>
+            <p class="muted">Отметьте один правильный вариант.</p>
+        </div>
+
+        <div id="multi-answer-block" class="field" style="display:none;">
+            <label class="field-label">Варианты ответа (несколько верных)</label>
+            <div class="question-options-grid">
+                {% for idx in range(4) %}
+                <div class="option-field">
+                    <input type="checkbox" name="correct_multi" value="{{ idx }}">
+                    <div class="input-with-image">
+                        <input type="text" name="option_{{ idx }}" placeholder="Вариант {{ idx + 1 }}" data-img-target>
+                        <button type="button" class="btn btn-secondary add-image-btn">+ картинка</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div id="number-answer-block" class="field" style="display:none;">
+            <label class="field-label">Правильное число</label>
+            <div class="input-with-image">
+                <input type="number" step="any" name="correct_number" placeholder="0" data-img-target>
+                <button type="button" class="btn btn-secondary add-image-btn">+ картинка</button>
+            </div>
         </div>
 
         <div style="margin-top:0.9rem; display:flex; gap:0.6rem;">
-            <button type="submit" class="btn btn-primary">Сохранить задачу</button>
-            <a href="/ui/questions" class="btn btn-ghost">Назад к списку</a>
+            <button type="submit" class="btn btn-primary">Сохранить вопрос</button>
+            <a href="/ui/questions" class="btn btn-ghost">Отмена</a>
         </div>
     </form>
 </section>
+
+<style>
+    .input-with-image { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .input-with-image textarea { min-height:140px; width:100%; }
+    .question-options-grid { display:flex; flex-direction:column; gap:8px; }
+    .option-field { display:flex; align-items:center; gap:10px; }
+</style>
 {% endblock %}
