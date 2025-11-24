@@ -32,7 +32,7 @@
                 <div class="field">
                     <label class="field-label">Текст задачи</label>
                     <div class="question-text">
-                        {{ question_html | safe }}
+                        {{ (question_html or (question.text | replace('\n', '<br>'))) | safe }}
                     </div>
                 </div>
 
@@ -60,7 +60,11 @@
                                         {% endif %}
                                     >
                                     <span class="answer-option-text">
-                                        {% if answers_html %}{{ answers_html[loop.index0] | safe }}{% else %}{{ opt.text }}{% endif %}
+                                        {% if answers_html and answers_html[loop.index0] %}
+                                            {{ answers_html[loop.index0] | safe }}
+                                        {% else %}
+                                            {{ opt.text | replace('\n', '<br>') | safe }}
+                                        {% endif %}
                                     </span>
                                 </label>
                             {% endfor %}
