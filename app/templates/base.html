@@ -143,43 +143,44 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 0.48rem 1.3rem;
+            padding: 0.5rem 1.35rem;
             border-radius: var(--radius-pill);
-            border: 1px solid rgba(99, 102, 241, 0.4);
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.85), rgba(99, 102, 241, 0.9));
+            border: 1px solid rgba(79, 70, 229, 0.55);
+            background: linear-gradient(135deg, rgba(74, 117, 255, 0.95), rgba(110, 98, 255, 0.95));
             color: #e5e7eb;
             font-size: 0.82rem;
             cursor: pointer;
-            box-shadow: 0 12px 30px rgba(59,130,246,0.35);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 14px 34px rgba(74,117,255,0.38);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
         }
 
         .btn:hover {
-            transform: scale(1.03);
-            box-shadow: 0 18px 40px rgba(59,130,246,0.45);
+            transform: scale(1.04);
+            box-shadow: 0 20px 48px rgba(74,117,255,0.5);
+            filter: brightness(1.03);
         }
 
         .btn-primary {
-            border: 1px solid rgba(99, 102, 241, 0.7);
-            background: linear-gradient(135deg, rgba(79, 70, 229, 0.95), rgba(99, 102, 241, 0.95));
-            box-shadow: 0 16px 42px rgba(99,102,241,0.55);
+            border: 1px solid rgba(110, 98, 255, 0.75);
+            background: linear-gradient(135deg, rgba(110, 98, 255, 1), rgba(90, 125, 255, 1));
+            box-shadow: 0 18px 46px rgba(110,98,255,0.6);
         }
 
         .btn-primary:hover {
-            transform: scale(1.04);
-            box-shadow: 0 20px 48px rgba(99,102,241,0.65);
+            transform: scale(1.05);
+            box-shadow: 0 22px 54px rgba(110,98,255,0.7);
         }
 
         .btn-ghost {
-            background: linear-gradient(135deg, rgba(59,130,246,0.12), rgba(99,102,241,0.12));
-            border-color: rgba(99, 102, 241, 0.35);
-            color: #dbeafe;
-            box-shadow: 0 8px 22px rgba(59,130,246,0.2);
+            background: linear-gradient(135deg, rgba(74,117,255,0.6), rgba(110,98,255,0.6));
+            border-color: rgba(79, 70, 229, 0.45);
+            color: #e5e7eb;
+            box-shadow: 0 12px 30px rgba(74,117,255,0.32);
         }
 
         .btn-ghost:hover {
-            transform: scale(1.03);
-            box-shadow: 0 14px 32px rgba(99,102,241,0.35);
+            transform: scale(1.04);
+            box-shadow: 0 18px 44px rgba(110,98,255,0.45);
         }
 
         .page {
