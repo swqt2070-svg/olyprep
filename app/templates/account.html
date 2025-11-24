@@ -17,6 +17,27 @@
     </div>
 </div>
 
+<div class="card quick-actions">
+    <h2 style="font-size:1.05rem; margin-bottom:0.6rem;">Быстрые действия</h2>
+    {% if user.role in ['admin', 'teacher'] %}
+        <div class="actions-row">
+            <a class="btn btn-primary" href="/ui/questions/new">Создать вопрос</a>
+            <a class="btn" href="/ui/questions">Библиотека заданий</a>
+            <a class="btn btn-primary" href="/ui/tests/new">Создать тест</a>
+            <a class="btn" href="/ui/tests">Список тестов</a>
+            <a class="btn" href="/ui/import">Импорт .md/.zip</a>
+            {% if user.role == 'admin' %}
+                <a class="btn" href="/ui/admin/users">Админка ролей</a>
+            {% endif %}
+        </div>
+    {% else %}
+        <div class="actions-row">
+            <a class="btn btn-primary" href="/ui/tests">Перейти к тестам</a>
+            <a class="btn" href="#student-results">Мои попытки</a>
+        </div>
+    {% endif %}
+</div>
+
 <div class="grid">
     <section class="card">
         <h2 style="font-size:1.1rem;">Профиль</h2>
@@ -73,7 +94,7 @@
 
 {% if student_results %}
 <section class="card table-card" style="margin-top:1.5rem;">
-    <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">Мои попытки тестов</h2>
+    <h2 id="student-results" style="font-size:1.0rem; margin-bottom:0.4rem;">Мои попытки тестов</h2>
     {% if student_results|length == 0 %}
         <p class="muted">Пока нет попыток.</p>
     {% else %}
@@ -134,4 +155,19 @@
     {% endif %}
 </section>
 {% endif %}
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+    .quick-actions {
+        padding: 16px 18px;
+        margin-bottom: 16px;
+    }
+
+    .quick-actions .actions-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+</style>
 {% endblock %}
