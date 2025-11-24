@@ -32,7 +32,7 @@
                 <div class="field">
                     <label class="field-label">Текст задачи</label>
                     <div class="question-text">
-                        {{ question.text | replace('\n', '<br>') | safe }}
+                        {{ question_html | safe }}
                     </div>
                 </div>
 
@@ -63,7 +63,13 @@
                                             checked
                                         {% endif %}
                                     >
-                                    <span class="answer-option-text">{{ opt.text }}</span>
+                                    <span class="answer-option-text">
+                                        {% if answers_html %}
+                                            {{ answers_html[loop.index0] | safe }}
+                                        {% else %}
+                                            {{ opt.text }}
+                                        {% endif %}
+                                    </span>
                                 </label>
                             {% endfor %}
                         </div>
@@ -179,7 +185,6 @@
         box-shadow: 0 0 0 1px rgba(124, 107, 255, 0.5);
     }
 
-    /* ВОТ ЭТО делает варианты построчно */
     .page-test-run .answers-list {
         display: flex;
         flex-direction: column;
@@ -225,30 +230,15 @@
         align-items: center;
     }
 
-    .page-test-run .test-run-question-nav {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-
     .page-test-run .btn-ghost-active {
         border-color: rgba(255,255,255,0.7);
         background: rgba(255,255,255,0.08);
     }
 
     @media (max-width: 768px) {
-        .page-test-run .card-test-run {
-            padding: 20px 16px;
-        }
-
-        .page-test-run .test-run-header {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-
-        .page-test-run .test-run-test-title {
-            text-align: left;
-        }
+        .page-test-run .card-test-run { padding: 20px 16px; }
+        .page-test-run .test-run-header { flex-direction: column; align-items: flex-start; }
+        .page-test-run .test-run-test-title { text-align: left; }
     }
 </style>
 {% endblock %}

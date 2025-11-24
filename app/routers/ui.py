@@ -1561,26 +1561,36 @@ async def test_view(
         if not submission or submission.user_id != user.id:
             submission = None
 
+    # простая замена markdown изображений на <img>
+    def md_to_html(text: str) -> str:
+        if not text:
+            return ""
+        text = re.sub(r"!\\[[^\\]]*]\\(([^)]+)\\)", r'<img src="\\1" style="max-width:100%;height:auto;">', text)
+        text = text.replace("\n", "<br>")
+        return text
+
     return templates.TemplateResponse(
         "test_run.html",
         {
-        "request": request,
-        "user": user,
-        "test": test,
-        "items": items,
-        "question": question,
-        "answers": answers_list,
-        "index": 0,
-        "total_questions": len(items),
-        "state_json": "",
-        "selected_answer_id": None,
-        "selected_answer_ids": [],
-        "answer_text": "",
-        "max_points": max_points,
-        "submission": submission,
-        "result": None,
-    },
-)
+            "request": request,
+            "user": user,
+            "test": test,
+            "items": items,
+            "question": question,
+            "question_html": md_to_html(question.text if hasattr(question, "text") else ""),
+            "answers": answers_list,
+            "answers_html": [md_to_html(getattr(a, "text", str(a))) for a in answers_list] if answers_list else None,
+            "index": 0,
+            "total_questions": len(items),
+            "state_json": "",
+            "selected_answer_id": None,
+            "selected_answer_ids": [],
+            "answer_text": "",
+            "max_points": max_points,
+            "submission": submission,
+            "result": None,
+        },
+    )
 
 
 @router.post("/tests/{test_id}/add-question")
