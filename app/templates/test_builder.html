@@ -5,10 +5,13 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-container">
-    <h1 class="page-title">
-        {% if mode == "create" %}Создать тест{% else %}Редактировать тест #{{ test.id }}{% endif %}
-    </h1>
+<div class="page">
+    <div class="page-header">
+        <div>
+            <div class="page-title">{% if mode == "create" %}Создать тест{% else %}Редактировать тест #{{ test.id }}{% endif %}</div>
+            <div class="page-subtitle">Выберите вопросы из библиотеки, отметив чекбокс.</div>
+        </div>
+    </div>
 
     <div class="card">
         <form method="post">
@@ -41,43 +44,48 @@
 
             <h2 class="section-title">Выберите вопросы из библиотеки</h2>
             <p class="section-hint">
-                Отметьте чекбокс, чтобы добавить вопрос в тест, и укажите баллы за него.
+                Раскрывайте ветки Категория → Класс → Год → Этап. Отметьте чекбокс, чтобы добавить вопрос в тест.
+                Каждому вопросу автоматически присваивается 1 балл.
             </p>
 
             {% if library %}
-                <div class="tree">
+            <div class="builder-tree">
                 {% for category, grades in library|dictsort %}
-                    <details class="tree-node" {% if loop.first %}open{% endif %}>
-                        <summary>Категория: {{ category }}</summary>
-                        {% for grade, years in grades|dictsort %}
-                            <details class="tree-node" {% if loop.first %}open{% endif %}>
-                                <summary>Класс: {% if grade == 0 %}—{% else %}{{ grade }}{% endif %}</summary>
-                                {% for year_code, stages in years|dictsort %}
-                                    <details class="tree-node" {% if loop.first %}open{% endif %}>
-                                        <summary>Год: {{ year_code or '—' }}</summary>
-                                        {% for stage, questions_list in stages|dictsort %}
-                                            <details class="tree-node">
-                                                <summary>Этап: {{ stage or '—' }}</summary>
-                                                <div class="question-list">
-                                                    {% for q in questions_list %}
-                                                        {% set tq = selected.get(q.id) if selected else None %}
-                                                        <label class="builder-question-row">
-                                                            <input type="checkbox" name="q_{{ q.id }}_include" {% if tq %}checked{% endif %}>
-                                                            <input type="hidden" name="q_{{ q.id }}_points" value="1">
-                                                            <span class="builder-id">#{{ q.id }}</span>
-                                                            <span class="builder-text">{{ q.text | truncate(180, True, '…') }}</span>
-                                                        </label>
-                                                    {% endfor %}
-                                                </div>
-                                            </details>
-                                        {% endfor %}
-                                    </details>
-                                {% endfor %}
+                <details class="builder-node" {% if loop.first %}open{% endif %}>
+                    <summary>Категория: {{ category }}</summary>
+
+                    {% for grade, years in grades|dictsort %}
+                    <details class="builder-node child" {% if loop.first %}open{% endif %}>
+                        <summary>Класс: {% if grade == 0 %}—{% else %}{{ grade }}{% endif %}</summary>
+
+                        {% for year_code, stages in years|dictsort %}
+                        <details class="builder-node child">
+                            <summary>Год: {{ year_code or '—' }}</summary>
+
+                            {% for stage, questions_list in stages|dictsort %}
+                            <details class="builder-node child">
+                                <summary>Этап: {{ stage or '—' }}</summary>
+
+                                <div class="builder-questions">
+                                    {% for q in questions_list %}
+                                    {% set tq = selected.get(q.id) if selected else None %}
+                                    <label class="builder-question">
+                                        <input type="checkbox" name="q_{{ q.id }}_include" {% if tq %}checked{% endif %}>
+                                        <input type="hidden" name="q_{{ q.id }}_points" value="1">
+                                        <span class="builder-id">#{{ q.id }}</span>
+                                        <span class="builder-text">{{ q.text | truncate(180, True, '…') }}</span>
+                                    </label>
+                                    {% endfor %}
+                                </div>
                             </details>
+                            {% endfor %}
+                        </details>
                         {% endfor %}
                     </details>
+                    {% endfor %}
+                </details>
                 {% endfor %}
-                </div>
+            </div>
             {% else %}
                 <p class="muted">Пока нет вопросов в библиотеке.</p>
             {% endif %}
@@ -95,59 +103,66 @@
 
 {% block extra_styles %}
 <style>
-    .tree {
-        border: 1px solid rgba(148,163,184,0.2);
-        border-radius: 12px;
-        padding: 12px 14px;
-        background: rgba(15,23,42,0.35);
+    .builder-tree {
         display: flex;
         flex-direction: column;
         gap: 10px;
+        padding: 8px;
+        background: rgba(15,23,42,0.35);
+        border: 1px solid rgba(148,163,184,0.2);
+        border-radius: 12px;
     }
 
-    .tree summary {
-        cursor: pointer;
+    .builder-node {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(148,163,184,0.18);
+        border-radius: 10px;
         padding: 8px 10px;
-        border-radius: 8px;
-        transition: background 0.15s ease;
+        margin-left: 0;
     }
 
-    .tree summary:hover {
+    .builder-node.child {
+        margin-left: 14px;
+    }
+
+    .builder-node summary {
+        cursor: pointer;
+        padding: 6px 6px;
+        border-radius: 8px;
+        font-weight: 600;
+        color: #e5e7eb;
+    }
+
+    .builder-node summary:hover {
         background: rgba(255,255,255,0.06);
     }
 
-    .tree-node {
+    .builder-questions {
         margin-left: 10px;
-        padding: 6px 0 2px 0;
-    }
-
-    .question-list {
-        margin-left: 14px;
+        margin-top: 8px;
         display: flex;
         flex-direction: column;
-        gap: 10px;
-        padding: 8px 0;
+        gap: 8px;
     }
 
-    .builder-question-row {
+    .builder-question {
         display: flex;
         align-items: center;
         gap: 10px;
         padding: 8px 10px;
         border-radius: 10px;
-        border: 1px solid rgba(148,163,184,0.18);
-        background: rgba(15,23,42,0.4);
-        margin-right: 8px;
+        border: 1px solid rgba(148,163,184,0.15);
+        background: rgba(15,23,42,0.45);
     }
 
-    .builder-question-row input[type="checkbox"] {
-        transform: scale(1.1);
+    .builder-question input[type="checkbox"] {
+        transform: scale(1.05);
     }
 
     .builder-id {
         font-weight: 600;
         color: #cbd5f5;
-        min-width: 60px;
+        min-width: 55px;
     }
 
     .builder-text {
