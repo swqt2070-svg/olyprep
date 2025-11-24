@@ -142,198 +142,37 @@
 
 {% block extra_styles %}
 <style>
-    .library-tree {
-        margin-top: 0.4rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0;
-    }
-
     .lib-level {
-        margin-bottom: 0;
-        border-radius: 8px;
+        margin-bottom: 0.5rem;
+        border-radius: 10px;
         background: rgba(255, 255, 255, 0.03);
-        padding: 0;
-        border: 1px solid rgba(148,163,184,0.15);
-        overflow: hidden;
+        padding: 0.4rem 0.6rem;
     }
-
-    .lib-level.lib-category {
-        margin-bottom: 12px;
-        background: rgba(59,130,246,0.08);
-        border: 1px solid rgba(59,130,246,0.2);
-    }
-
-    .lib-level .lib-level {
-        margin-left: 0;
-        margin-bottom: 0;
-        margin-top: 0;
-        border: none;
-        background: rgba(255, 255, 255, 0.02);
-    }
-
-    .lib-level.lib-grade {
-        margin: 8px 8px 0 8px;
-        background: rgba(168,85,247,0.08);
-        border: 1px solid rgba(168,85,247,0.15);
-    }
-
-    .lib-level.lib-year {
-        margin: 6px 12px 0 12px;
-        background: rgba(34,197,94,0.08);
-        border: 1px solid rgba(34,197,94,0.15);
-    }
-
-    .lib-level.lib-stage {
-        margin: 6px 16px 0 16px;
-        background: rgba(249,115,22,0.08);
-        border: 1px solid rgba(249,115,22,0.15);
-    }
-
     .lib-summary {
         cursor: pointer;
         list-style: none;
-        font-weight: 600;
-        color: #e5e7eb;
-        padding: 10px 12px;
-        display: block;
-        user-select: none;
-    }
-
-    .lib-level.lib-grade > .lib-summary {
-        padding: 8px 12px;
         font-weight: 500;
-        font-size: 0.95rem;
     }
-
-    .lib-level.lib-year > .lib-summary {
-        padding: 8px 12px;
-        font-weight: 500;
-        font-size: 0.95rem;
-    }
-
-    .lib-level.lib-stage > .lib-summary {
-        padding: 8px 12px;
-        font-weight: 500;
-        font-size: 0.95rem;
-    }
-
     .lib-summary::-webkit-details-marker {
         display: none;
     }
-
     .lib-summary::before {
         content: "▸";
         display: inline-block;
-        margin-right: 0.6rem;
+        margin-right: 0.4rem;
         transition: transform 0.15s ease-out;
         opacity: 0.7;
-        font-size: 0.9em;
     }
-
     details[open] > .lib-summary::before {
         transform: rotate(90deg);
     }
-
-    .lib-summary:hover {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 6px;
-    }
-
-    .lib-level details {
-        margin-top: 0;
-    }
-
-    .question-list {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        margin-top: 0;
-        padding: 10px 12px;
-        background: rgba(0, 0, 0, 0.3);
-    }
-
-    .lib-stage .question-list {
-        padding: 10px 12px;
-    }
-
-    .builder-question {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 10px 12px;
-        border-radius: 8px;
-        border: 1px solid rgba(148,163,184,0.2);
-        background: linear-gradient(135deg, rgba(23,37,84,0.7), rgba(15,23,42,0.7));
-        cursor: pointer;
-        transition: all 0.15s ease;
-    }
-
-    .builder-question:hover {
-        background: linear-gradient(135deg, rgba(30,50,100,0.8), rgba(20,30,55,0.8));
-        border-color: rgba(148,163,184,0.3);
-    }
-
-    .builder-question input[type="checkbox"] {
-        transform: scale(1.05);
-        margin-top: 2px;
-        flex-shrink: 0;
-        cursor: pointer;
-    }
-
-    .builder-question-content {
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        flex: 1;
-    }
-
-    .question-thumb-wrapper {
-        flex-shrink: 0;
-    }
-
     .question-thumb {
-        max-width: 70px;
-        max-height: 55px;
+        max-width: 80px;
+        max-height: 60px;
         object-fit: cover;
         border-radius: 6px;
-        border: 1px solid rgba(148,163,184,0.2);
-    }
-
-    .builder-text {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        color: #e5e7eb;
-        flex: 1;
-    }
-
-    .builder-text-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-size: 0.85rem;
-    }
-
-    .builder-id {
-        font-weight: 700;
-        color: #cbd5f5;
-        min-width: 40px;
-    }
-
-    .builder-type {
-        font-size: 0.8rem;
-        color: #9ca3af;
-        background: rgba(148,163,184,0.2);
-        padding: 2px 8px;
-        border-radius: 4px;
-        white-space: nowrap;
-    }
-
-    .builder-text-main {
-        line-height: 1.3;
-        font-size: 0.9rem;
-        color: #d1d5db;
     }
 </style>
+
+{% endif %}
 {% endblock %}
