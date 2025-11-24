@@ -42,23 +42,27 @@
 
             <h2 class="section-title" style="margin-bottom:0.35rem;">Выберите вопросы из библиотеки</h2>
             <p class="section-hint" style="margin-bottom:0.5rem;">
-                Раскрывай уровни: <strong>Категория → Класс → Год → Этап</strong>, чтобы увидеть задачи. Отмечай чекбокс, чтобы добавить вопрос (по умолчанию 1 балл).
+                Раскрывай уровни: <strong>Категория → Класс → Год → Этап</strong>, чтобы увидеть задачи. Отмечай чекбокс, чтобы добавить вопрос.
             </p>
 
             {% if library %}
-            <div class="library-tree builder-tree">
+            <div class="library-tree">
+                {# Категория #}
                 {% for category, grades in library|dictsort %}
                 <details class="lib-level lib-category" {% if loop.first %}open{% endif %}>
                     <summary class="lib-summary">
                         <strong>Категория:</strong> {{ category }}
                     </summary>
 
+                    {# Класс #}
                     {% for grade, years in grades|dictsort %}
                     <details class="lib-level lib-grade">
                         <summary class="lib-summary">
-                            <strong>Класс:</strong> {% if grade == 0 %}&mdash;{% else %}{{ grade }}{% endif %}
+                            <strong>Класс:</strong>
+                            {% if grade == 0 %}&mdash;{% else %}{{ grade }}{% endif %}
                         </summary>
 
+                        {# Год #}
                         {% for year_code, stages in years|dictsort %}
                         {% set code = year_code|string %}
                         {% if code and code|length == 4 %}
@@ -68,33 +72,46 @@
                         {% else %}
                             {% set year_label = code %}
                         {% endif %}
+
                         <details class="lib-level lib-year">
                             <summary class="lib-summary">
                                 <strong>Год:</strong> {{ year_label or '—' }}
                             </summary>
 
-                            {% for stage, questions_list in stages|dictsort %}
+                            {# Этап #}
+                            {% for stage, questions in stages|dictsort %}
                             <details class="lib-level lib-stage">
                                 <summary class="lib-summary">
                                     <strong>Этап:</strong> {{ stage or '—' }}
                                 </summary>
 
                                 <div class="question-list">
-                                    {% for q in questions_list %}
+                                    {% for q in questions %}
                                     {% set tq = selected.get(q.id) if selected else None %}
                                     <label class="builder-question">
                                         <input type="checkbox" name="q_{{ q.id }}_include" {% if tq %}checked{% endif %}>
-                                        <input type="hidden" name="q_{{ q.id }}_points" value="1">
-                                        <span class="builder-id">#{{ q.id }}</span>
-                                        <div class="builder-text">
-                                            <div class="builder-text-main">{{ q.text | truncate(180, True, '…') }}</div>
-                                            <div class="builder-text-meta">
-                                                {% if q.answer_type == "single" %}Выбор ответа{% else %}Текстовый ответ{% endif %}
+                                        <div class="builder-question-content">
+                                            {% if q.image_path %}
+                                            <div class="question-thumb-wrapper">
+                                                <img src="{{ q.image_path }}"
+                                                     alt="Изображение задачи"
+                                                     class="question-thumb">
+                                            </div>
+                                            {% endif %}
+                                            <div class="builder-text">
+                                                <div class="builder-text-header">
+                                                    <span class="builder-id">#{{ q.id }}</span>
+                                                    <span class="builder-type">
+                                                        {% if q.answer_type == "single" %}Выбрать один{% else %}Написать текст{% endif %}
+                                                    </span>
+                                                </div>
+                                                <div class="builder-text-main">{{ q.text | truncate(180, True, '…') }}</div>
                                             </div>
                                         </div>
                                     </label>
                                     {% endfor %}
                                 </div>
+
                             </details>
                             {% endfor %}
 
@@ -129,12 +146,11 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
-    }
-    .builder-tree {
         background: rgba(255,255,255,0.02);
         border-radius: 12px;
         padding: 10px 12px;
     }
+
     .lib-level {
         margin-bottom: 0.65rem;
         border-radius: 10px;
@@ -142,10 +158,12 @@
         padding: 0.55rem 0.75rem;
         border: 1px solid rgba(148,163,184,0.15);
     }
+
     .lib-level .lib-level {
         margin-left: 10px;
         margin-bottom: 0.5rem;
     }
+
     .lib-summary {
         cursor: pointer;
         list-style: none;
@@ -153,7 +171,11 @@
         color: #e5e7eb;
         padding: 4px 2px;
     }
-    .lib-summary::-webkit-details-marker { display: none; }
+
+    .lib-summary::-webkit-details-marker {
+        display: none;
+    }
+
     .lib-summary::before {
         content: "▸";
         display: inline-block;
@@ -161,9 +183,14 @@
         transition: transform 0.15s ease-out;
         opacity: 0.7;
     }
-    details[open] > .lib-summary::before { transform: rotate(90deg); }
 
-    .lib-level details { margin-top: 0.4rem; }
+    details[open] > .lib-summary::before {
+        transform: rotate(90deg);
+    }
+
+    .lib-level details {
+        margin-top: 0.4rem;
+    }
 
     .question-list {
         display: flex;
@@ -172,6 +199,7 @@
         margin-top: 10px;
         padding-right: 4px;
     }
+
     .builder-question {
         display: flex;
         align-items: flex-start;
@@ -181,26 +209,69 @@
         border: 1px solid rgba(148,163,184,0.16);
         background: linear-gradient(135deg, rgba(23,37,84,0.55), rgba(15,23,42,0.55));
         box-shadow: 0 6px 16px rgba(0,0,0,0.18);
+        cursor: pointer;
+        transition: background 0.15s ease;
     }
+
+    .builder-question:hover {
+        background: linear-gradient(135deg, rgba(30,50,100,0.65), rgba(20,30,55,0.65));
+    }
+
     .builder-question input[type="checkbox"] {
         transform: scale(1.05);
         margin-top: 4px;
+        flex-shrink: 0;
     }
-    .builder-id {
-        font-weight: 700;
-        color: #cbd5f5;
-        min-width: 55px;
+
+    .builder-question-content {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        flex: 1;
     }
+
+    .question-thumb-wrapper {
+        flex-shrink: 0;
+    }
+
+    .question-thumb {
+        max-width: 80px;
+        max-height: 60px;
+        object-fit: cover;
+        border-radius: 6px;
+    }
+
     .builder-text {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 6px;
         color: #e5e7eb;
+        flex: 1;
     }
-    .builder-text-main { line-height: 1.35; }
-    .builder-text-meta {
+
+    .builder-text-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.9rem;
+    }
+
+    .builder-id {
+        font-weight: 700;
+        color: #cbd5f5;
+        min-width: 45px;
+    }
+
+    .builder-type {
         font-size: 0.85rem;
         color: #9ca3af;
+        background: rgba(148,163,184,0.15);
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+
+    .builder-text-main {
+        line-height: 1.35;
     }
 </style>
 {% endblock %}

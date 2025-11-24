@@ -748,7 +748,7 @@ async def questions_list(
     library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
 
     for q in rows:
-        category = q.category or "Без категории"
+        category = q.category or "??? ?????????"
         try:
             grade = int(q.grade) if q.grade is not None else 0
         except (TypeError, ValueError):
@@ -1089,7 +1089,7 @@ async def test_builder_new(
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
     library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
     for q in questions:
-        category = q.category or "Без категории"
+        category = q.category or "??? ?????????"
         try:
             grade = int(q.grade) if q.grade is not None else 0
         except (TypeError, ValueError):
@@ -1212,7 +1212,7 @@ async def test_builder_edit(
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
     library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
     for q in questions:
-        category = q.category or "Без категории"
+        category = q.category or "??? ?????????"
         try:
             grade = int(q.grade) if q.grade is not None else 0
         except (TypeError, ValueError):
@@ -1288,6 +1288,16 @@ async def test_builder_edit_post(
             .all()
         )
         selected = {tq.question_id: tq for tq in tqs}
+        library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
+        for q in questions:
+            category = q.category or "??? ?????????"
+            try:
+                grade = int(q.grade) if q.grade is not None else 0
+            except (TypeError, ValueError):
+                grade = 0
+            year = q.year or ""
+            stage = q.stage or ""
+            library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
         return templates.TemplateResponse(
             "test_builder.html",
             {
@@ -1296,6 +1306,7 @@ async def test_builder_edit_post(
                 "mode": "edit",
                 "test": test,
                 "questions": questions,
+                "library": library,
                 "selected": selected,
                 "max_attempts": max_attempts,
                 "error": error,
