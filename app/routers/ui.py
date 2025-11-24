@@ -748,7 +748,7 @@ async def questions_list(
     library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
 
     for q in rows:
-        category = q.category or "??? ?????????"
+        category = q.category or "Без категории"
         try:
             grade = int(q.grade) if q.grade is not None else 0
         except (TypeError, ValueError):
@@ -1147,6 +1147,16 @@ async def test_builder_new_post(
         error = None
 
     if error:
+        library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
+        for q in questions:
+            category = q.category or "??? ?????????"
+            try:
+                grade = int(q.grade) if q.grade is not None else 0
+            except (TypeError, ValueError):
+                grade = 0
+            year = q.year or ""
+            stage = q.stage or ""
+            library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
         return templates.TemplateResponse(
             "test_builder.html",
             {
@@ -1155,7 +1165,7 @@ async def test_builder_new_post(
                 "mode": "create",
                 "test": None,
                 "questions": questions,
-                "library": {},
+                "library": library,
                 "selected": {},
                 "max_attempts": max_attempts,
                 "error": error,

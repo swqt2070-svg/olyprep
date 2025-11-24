@@ -1,15 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}
-    {% if mode == "create" %}Создание теста{% else %}Редактирование теста{% endif %}
-{% endblock %}
+{% block title %}{% if mode == "create" %}Создать тест{% else %}Редактировать тест{% endif %}{% endblock %}
 
 {% block content %}
 <div class="page">
     <div class="page-header">
         <div>
             <div class="page-title">{% if mode == "create" %}Создать тест{% else %}Редактировать тест #{{ test.id }}{% endif %}</div>
-            <div class="page-subtitle">Выберите вопросы из библиотеки, отметив чекбокс.</div>
+            <div class="page-subtitle">Соберите задания из библиотеки и задайте ограничения по попыткам.</div>
         </div>
     </div>
 
@@ -42,59 +40,82 @@
 
             <hr>
 
-            <h2 class="section-title">Выберите вопросы из библиотеки</h2>
-            <p class="section-hint">
-                Раскрывайте ветки Категория → Класс → Год → Этап. Отметьте чекбокс, чтобы добавить вопрос в тест.
-                Каждому вопросу автоматически присваивается 1 балл.
+            <h2 class="section-title" style="margin-bottom:0.35rem;">Выберите вопросы из библиотеки</h2>
+            <p class="section-hint" style="margin-bottom:0.5rem;">
+                Раскрывай уровни: <strong>Категория → Класс → Год → Этап</strong>, чтобы увидеть задачи. Отмечай чекбокс, чтобы добавить вопрос (по умолчанию 1 балл).
             </p>
 
             {% if library %}
-            <div class="builder-tree">
+            <div class="library-tree builder-tree">
                 {% for category, grades in library|dictsort %}
-                <details class="builder-node" {% if loop.first %}open{% endif %}>
-                    <summary>Категория: {{ category }}</summary>
+                <details class="lib-level lib-category" {% if loop.first %}open{% endif %}>
+                    <summary class="lib-summary">
+                        <strong>Категория:</strong> {{ category }}
+                    </summary>
 
                     {% for grade, years in grades|dictsort %}
-                    <details class="builder-node child" {% if loop.first %}open{% endif %}>
-                        <summary>Класс: {% if grade == 0 %}—{% else %}{{ grade }}{% endif %}</summary>
+                    <details class="lib-level lib-grade">
+                        <summary class="lib-summary">
+                            <strong>Класс:</strong> {% if grade == 0 %}&mdash;{% else %}{{ grade }}{% endif %}
+                        </summary>
 
                         {% for year_code, stages in years|dictsort %}
-                        <details class="builder-node child">
-                            <summary>Год: {{ year_code or '—' }}</summary>
+                        {% set code = year_code|string %}
+                        {% if code and code|length == 4 %}
+                            {% set y1 = ('20' ~ code[0:2])|int %}
+                            {% set y2 = ('20' ~ code[2:4])|int %}
+                            {% set year_label = y1 ~ '–' ~ y2 %}
+                        {% else %}
+                            {% set year_label = code %}
+                        {% endif %}
+                        <details class="lib-level lib-year">
+                            <summary class="lib-summary">
+                                <strong>Год:</strong> {{ year_label or '—' }}
+                            </summary>
 
                             {% for stage, questions_list in stages|dictsort %}
-                            <details class="builder-node child">
-                                <summary>Этап: {{ stage or '—' }}</summary>
+                            <details class="lib-level lib-stage">
+                                <summary class="lib-summary">
+                                    <strong>Этап:</strong> {{ stage or '—' }}
+                                </summary>
 
-                                <div class="builder-questions">
+                                <div class="question-list">
                                     {% for q in questions_list %}
                                     {% set tq = selected.get(q.id) if selected else None %}
                                     <label class="builder-question">
                                         <input type="checkbox" name="q_{{ q.id }}_include" {% if tq %}checked{% endif %}>
                                         <input type="hidden" name="q_{{ q.id }}_points" value="1">
                                         <span class="builder-id">#{{ q.id }}</span>
-                                        <span class="builder-text">{{ q.text | truncate(180, True, '…') }}</span>
+                                        <div class="builder-text">
+                                            <div class="builder-text-main">{{ q.text | truncate(180, True, '…') }}</div>
+                                            <div class="builder-text-meta">
+                                                {% if q.answer_type == "single" %}Выбор ответа{% else %}Текстовый ответ{% endif %}
+                                            </div>
+                                        </div>
                                     </label>
                                     {% endfor %}
                                 </div>
                             </details>
                             {% endfor %}
+
                         </details>
                         {% endfor %}
+
                     </details>
                     {% endfor %}
+
                 </details>
                 {% endfor %}
             </div>
             {% else %}
-                <p class="muted">Пока нет вопросов в библиотеке.</p>
+                <p class="muted">Пока нет доступных задач в библиотеке.</p>
             {% endif %}
 
             <div class="form-actions">
                 <button type="submit" class="btn btn-primary">
                     {% if mode == "create" %}Создать тест{% else %}Сохранить изменения{% endif %}
                 </button>
-                <a href="/ui/tests" class="btn btn-ghost">Назад к тестам</a>
+                <a href="/ui/tests" class="btn btn-ghost">Вернуться к списку</a>
             </div>
         </form>
     </div>
@@ -103,70 +124,83 @@
 
 {% block extra_styles %}
 <style>
-    .builder-tree {
+    .library-tree {
+        margin-top: 0.4rem;
         display: flex;
         flex-direction: column;
-        gap: 10px;
-        padding: 8px;
-        background: rgba(15,23,42,0.35);
-        border: 1px solid rgba(148,163,184,0.2);
-        border-radius: 12px;
+        gap: 12px;
     }
-
-    .builder-node {
+    .builder-tree {
         background: rgba(255,255,255,0.02);
-        border: 1px solid rgba(148,163,184,0.18);
+        border-radius: 12px;
+        padding: 10px 12px;
+    }
+    .lib-level {
+        margin-bottom: 0.65rem;
         border-radius: 10px;
-        padding: 8px 10px;
-        margin-left: 0;
+        background: rgba(255, 255, 255, 0.03);
+        padding: 0.55rem 0.75rem;
+        border: 1px solid rgba(148,163,184,0.15);
     }
-
-    .builder-node.child {
-        margin-left: 14px;
+    .lib-level .lib-level {
+        margin-left: 10px;
+        margin-bottom: 0.5rem;
     }
-
-    .builder-node summary {
+    .lib-summary {
         cursor: pointer;
-        padding: 6px 6px;
-        border-radius: 8px;
+        list-style: none;
         font-weight: 600;
         color: #e5e7eb;
+        padding: 4px 2px;
     }
-
-    .builder-node summary:hover {
-        background: rgba(255,255,255,0.06);
+    .lib-summary::-webkit-details-marker { display: none; }
+    .lib-summary::before {
+        content: "▸";
+        display: inline-block;
+        margin-right: 0.4rem;
+        transition: transform 0.15s ease-out;
+        opacity: 0.7;
     }
+    details[open] > .lib-summary::before { transform: rotate(90deg); }
 
-    .builder-questions {
-        margin-left: 10px;
-        margin-top: 8px;
+    .lib-level details { margin-top: 0.4rem; }
+
+    .question-list {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
+        margin-top: 10px;
+        padding-right: 4px;
     }
-
     .builder-question {
         display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 8px 10px;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 14px;
         border-radius: 10px;
-        border: 1px solid rgba(148,163,184,0.15);
-        background: rgba(15,23,42,0.45);
+        border: 1px solid rgba(148,163,184,0.16);
+        background: linear-gradient(135deg, rgba(23,37,84,0.55), rgba(15,23,42,0.55));
+        box-shadow: 0 6px 16px rgba(0,0,0,0.18);
     }
-
     .builder-question input[type="checkbox"] {
         transform: scale(1.05);
+        margin-top: 4px;
     }
-
     .builder-id {
-        font-weight: 600;
+        font-weight: 700;
         color: #cbd5f5;
         min-width: 55px;
     }
-
     .builder-text {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
         color: #e5e7eb;
+    }
+    .builder-text-main { line-height: 1.35; }
+    .builder-text-meta {
+        font-size: 0.85rem;
+        color: #9ca3af;
     }
 </style>
 {% endblock %}
