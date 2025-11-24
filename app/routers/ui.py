@@ -1565,7 +1565,8 @@ async def test_view(
     def md_to_html(text: str) -> str:
         if not text:
             return ""
-        text = re.sub(r"!\\[[^\\]]*]\\(([^)]+)\\)", r'<img src="\\1" style="max-width:100%;height:auto;">', text)
+        # преобразуем ![](url) в img
+        text = re.sub(r"!\[[^\]]*\]\(([^)]+)\)", r'<img src="\1" style="max-width:100%;height:auto;">', text)
         text = text.replace("\n", "<br>")
         return text
 
