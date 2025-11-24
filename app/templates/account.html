@@ -75,8 +75,24 @@
 
     <aside class="card">
         <h2 style="font-size:1.05rem;">Рабочая зона</h2>
+        <div class="actions-row" style="margin-bottom:0.75rem;">
+            {% if user.role in ['admin', 'teacher'] %}
+                <a class="btn btn-primary" href="/ui/questions/new">Создать вопрос</a>
+                <a class="btn" href="/ui/questions">Библиотека заданий</a>
+                <a class="btn btn-primary" href="/ui/tests/new">Создать тест</a>
+                <a class="btn" href="/ui/tests">Список тестов</a>
+                <a class="btn" href="/ui/import">Импорт .md/.zip</a>
+                {% if user.role == 'admin' %}
+                    <a class="btn" href="/ui/admin/users">Админка ролей</a>
+                {% endif %}
+            {% else %}
+                <a class="btn btn-primary" href="/ui/tests">Перейти к тестам</a>
+                <a class="btn" href="#student-results">Мои попытки</a>
+            {% endif %}
+        </div>
+
         {% if user.role in ['admin', 'teacher'] %}
-            <ul class="muted" style="margin-top:0.75rem; list-style:none;">
+            <ul class="muted" style="margin-top:0.25rem; list-style:none;">
                 <li style="margin-bottom:0.45rem;">• Открыть <a href="/ui/questions">библиотеку заданий</a> или <a href="/ui/questions/new">добавить новое</a>.</li>
                 <li style="margin-bottom:0.45rem;">• Составить тест в <a href="/ui/tests">конструкторе</a> и задать лимит попыток.</li>
                 <li style="margin-bottom:0.45rem;">• Смотреть детальные результаты учеников через кнопку «Детали» в таблице ниже.</li>
