@@ -110,7 +110,8 @@
 </div>
 {% endblock %}
 
-{% block extra_styles %}
+
+{% block extra_head %}
 <style>
     .page-test-run .card-test-run {
         max-width: 960px;
@@ -178,6 +179,7 @@
         box-shadow: 0 0 0 1px rgba(124, 107, 255, 0.5);
     }
 
+    /* ВОТ ЭТО делает варианты построчно */
     .page-test-run .answers-list {
         display: flex;
         flex-direction: column;
