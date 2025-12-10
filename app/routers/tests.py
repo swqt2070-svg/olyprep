@@ -109,17 +109,28 @@ def answer_question(
 
     correct, earned = _grade(q, payload.given, tq.points)
 
-    ans = Answer(
-        submission_id=submission.id,
-        question_id=q.id,
-        given=payload.given,
-        correct=correct,
-        points=earned
+    ans = (
+        db.query(Answer)
+        .filter(Answer.submission_id == submission.id, Answer.question_id == q.id)
+        .first()
     )
+    old_points = 0
+    if ans:
+        old_points = ans.points or 0
+        ans.given = payload.given
+        ans.correct = bool(correct)
+        ans.points = earned
+    else:
+        ans = Answer(
+            submission_id=submission.id,
+            question_id=q.id,
+            given=payload.given,
+            correct=bool(correct),
+            points=earned,
+        )
+        db.add(ans)
 
-    db.add(ans)
-
-    submission.score += earned
+    submission.score = max((submission.score or 0) - old_points + earned, 0)
     db.add(submission)
 
     db.commit()

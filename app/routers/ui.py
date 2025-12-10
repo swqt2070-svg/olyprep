@@ -45,17 +45,27 @@ def redirect(url: str) -> RedirectResponse:
 
 
 @router.post("/upload-image")
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+):
     if not file or not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Можно загружать только изображения")
 
-    ext = Path(file.filename or "").suffix.lower()
+    ext = (Path(file.filename or "").suffix or "").lower()
+    allowed_ext = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+    if ext and ext not in allowed_ext:
+        raise HTTPException(status_code=400, detail="Недопустимое расширение файла")
     if not ext:
         ext = ".img"
-    filename = f"{uuid4().hex}{ext}"
-    dest = UPLOAD_DIR / filename
 
     data = await file.read()
+    max_size = 5 * 1024 * 1024  # 5 MB
+    if len(data) > max_size:
+        raise HTTPException(status_code=413, detail="Файл слишком большой")
+
+    filename = f"{uuid4().hex}{ext}"
+    dest = UPLOAD_DIR / filename
     dest.write_bytes(data)
 
     url = f"/static/uploads/{filename}"
@@ -1565,8 +1575,12 @@ async def test_view(
     def md_to_html(text: str) -> str:
         if not text:
             return ""
-        # преобразуем ![](url) в img, допускаем пробелы вокруг url
-        html = re.sub(r"!\[[^\]]*\]\(\s*([^)]+?)\s*\)", r'<img src="\1" style="max-width:100%;height:auto;">', text)
+        # превращаем ![](url) в <img>, допускаем пробелы вокруг url
+        html = re.sub(
+            r"!\[[^\]]*\]\(\s*([^)]+?)\s*\)",
+            r'<img src="\1" style="max-width:100%;height:auto;">',
+            text,
+        )
         html = html.replace("\n", "<br>")
         return html
 
@@ -1920,6 +1934,5 @@ async def submission_set_points(
     db.commit()
 
     return RedirectResponse(url=f"/ui/submissions/{submission_id}", status_code=303)
-
 
 

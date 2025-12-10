@@ -8,8 +8,9 @@ from pathlib import Path
 import jwt
 
 from app.database import Base, engine
+from app.config import settings
 from app import models
-from app.routers import auth, users, questions, tests, ui, tests_new  # ← ДОБАВЛЕН ui
+from app.routers import auth, users, questions, ui, tests_new  # ← ДОБАВЛЕН ui
 
 
 app = FastAPI(title="OlyPrep MVP")
@@ -36,7 +37,6 @@ app.include_router(tests_new.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(questions.router)
-app.include_router(tests.router)
 app.include_router(ui.router)  # ← ДОБАВЛЕНО
 
 @app.get("/", response_class=HTMLResponse)

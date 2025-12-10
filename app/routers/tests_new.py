@@ -157,6 +157,7 @@ def _save_answer_to_db(
     attempt: TestAttempt,
     question: Question,
     answer_id: Optional[int],
+    answer_ids: Optional[List[int]],
     answer_text: str,
 ) -> None:
     """
@@ -176,6 +177,18 @@ def _save_answer_to_db(
         )
         db.add(taa)
 
+    # подготовка выбранных вариантов (для multi держим список в текстовом поле)
+    normalized_ids: List[int] = []
+    if answer_ids:
+        for raw in answer_ids:
+            try:
+                normalized_ids.append(int(raw))
+            except (TypeError, ValueError):
+                continue
+        normalized_ids = sorted(set(normalized_ids))
+        if normalized_ids:
+            answer_id = normalized_ids[0]
+
     # id выбранного варианта
     for field in ("answer_id", "selected_answer_id", "option_id"):
         if hasattr(taa, field):
@@ -183,6 +196,8 @@ def _save_answer_to_db(
 
     # текст ответа
     cleaned_text = (answer_text or "").strip()
+    if normalized_ids:
+        cleaned_text = json.dumps(normalized_ids)
     for field in ("answer_text", "text_answer", "value"):
         if hasattr(taa, field):
             setattr(taa, field, cleaned_text)
@@ -283,6 +298,20 @@ async def run_test_get(
             question = question.question
     taa = answers_map.get(question.id)
     selected_answer_id, text_answer = _extract_answer_values(taa)
+    selected_answer_ids: List[int] = []
+    if getattr(question, "answer_type", "text") in ("multi", "multiple"):
+        raw_multi = ""
+        if taa is not None:
+            raw_multi = getattr(taa, "answer_text", "") or getattr(taa, "value", "")
+        try:
+            decoded = json.loads(raw_multi) if raw_multi else []
+            if isinstance(decoded, list):
+                selected_answer_ids = [int(x) for x in decoded if str(x).strip() != ""]
+        except Exception:
+            selected_answer_ids = []
+        if not selected_answer_ids and selected_answer_id is not None:
+            selected_answer_ids = [selected_answer_id]
+        text_answer = ""
 
     # варианты ответа — только с непустым текстом
     options: List[Answer] = []
@@ -291,18 +320,30 @@ async def run_test_get(
             raw_opts = json.loads(question.options)
             for idx, text in enumerate(raw_opts):
                 if text and str(text).strip():
-                    options.append(SimpleNamespace(id=idx, text=text))
+                    options.append(SimpleNamespace(id=idx, text=text, image_path=None))
         except Exception:
             options = []
     if not options and hasattr(question, "option_items"):
         for opt in getattr(question, "option_items") or []:
             if opt and getattr(opt, "text", None):
-                options.append(SimpleNamespace(id=getattr(opt, "id", None), text=opt.text))
+                options.append(
+                    SimpleNamespace(
+                        id=getattr(opt, "id", None),
+                        text=opt.text,
+                        image_path=getattr(opt, "image_path", None),
+                    )
+                )
     if not options and hasattr(question, "answers") and question.answers:
         for opt in question.answers:
             text = getattr(opt, "text", None)
             if text and str(text).strip():
-                options.append(opt)
+                options.append(
+                    SimpleNamespace(
+                        id=getattr(opt, "id", None),
+                        text=text,
+                        image_path=getattr(opt, "image_path", None),
+                    )
+                )
 
     questions_for_nav = [q.question if hasattr(q, "question") and q.question else q for q in tqs]
     nav = _build_navigation(questions_for_nav, answers_map, position)
@@ -321,7 +362,7 @@ async def run_test_get(
             "max_points": max_score,
             "answers": options,
             "selected_answer_id": selected_answer_id,
-            "selected_answer_ids": [],
+            "selected_answer_ids": selected_answer_ids,
             "answer_text": text_answer,
             "state_json": "",
             "nav": nav,
@@ -336,9 +377,10 @@ async def run_test_post(
     position: int,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
-    # ????? ? ?????
+    # ответ с варианта/текста
     answer_id: Optional[int] = Form(None),
     selected_answer_id: Optional[int] = Form(None),
+    selected_answer_ids: Optional[List[int]] = Form(None),
     answer_text: str = Form(""),
     action: str = Form("next"),
     goto: Optional[int] = Form(None),
@@ -376,12 +418,23 @@ async def run_test_post(
     if answer_id is None and selected_answer_id is not None:
         answer_id = selected_answer_id
 
+    selected_ids_list: List[int] = []
+    if selected_answer_ids:
+        for raw in selected_answer_ids:
+            try:
+                selected_ids_list.append(int(raw))
+            except (TypeError, ValueError):
+                continue
+    if not selected_ids_list and answer_id is not None:
+        selected_ids_list = [answer_id]
+
     # 1. Сохраняем ответ
     _save_answer_to_db(
         db=db,
         attempt=attempt,
         question=question,
         answer_id=answer_id,
+        answer_ids=selected_ids_list if getattr(question, "answer_type", "text") in ("multi", "multiple") else None,
         answer_text=answer_text,
     )
     db.commit()
@@ -407,12 +460,45 @@ async def run_test_post(
                         q = q.question
                 taa = answers_map.get(q.id)
                 selected_id, text_val = _extract_answer_values(taa)
+                selected_ids: List[int] = []
+                if getattr(q, "answer_type", "text") in ("multi", "multiple"):
+                    raw_multi = ""
+                    if taa is not None:
+                        raw_multi = getattr(taa, "answer_text", "") or getattr(taa, "value", "")
+                    try:
+                        decoded = json.loads(raw_multi) if raw_multi else []
+                        if isinstance(decoded, list):
+                            selected_ids = [int(x) for x in decoded if str(x).strip() != ""]
+                    except Exception:
+                        selected_ids = []
+                    if not selected_ids and selected_id is not None:
+                        selected_ids = [selected_id]
 
-                if getattr(q, "answer_type", "text") == "text":
+                answer_type = getattr(q, "answer_type", "text")
+                points_for_q = getattr(link, "points", 0) or 0
+
+                if answer_type == "text":
                     gt = (q.correct or "").strip().lower() if hasattr(q, "correct") else ""
                     uv = (text_val or "").strip().lower()
                     if gt and uv and gt == uv:
-                        score += getattr(link, "points", 0) or 0
+                        score += points_for_q
+                elif answer_type == "number":
+                    try:
+                        gt_num = float(q.correct) if q.correct is not None else None
+                        uv_num = float(text_val) if text_val not in (None, "") else None
+                    except (TypeError, ValueError):
+                        gt_num = uv_num = None
+                    if gt_num is not None and uv_num is not None and gt_num == uv_num:
+                        score += points_for_q
+                elif answer_type in ("multi", "multiple"):
+                    try:
+                        correct_multi = json.loads(q.correct) if q.correct else []
+                        correct_set = {int(x) for x in correct_multi}
+                    except Exception:
+                        correct_set = set()
+                    user_set = {int(x) for x in selected_ids} if selected_ids else set()
+                    if correct_set and user_set and correct_set == user_set:
+                        score += points_for_q
                 else:
                     try:
                         correct_idx = int(q.correct) if q.correct is not None else None
@@ -423,7 +509,7 @@ async def run_test_post(
                     except (TypeError, ValueError):
                         user_idx = None
                     if correct_idx is not None and user_idx is not None and correct_idx == user_idx:
-                        score += getattr(link, "points", 0) or 0
+                        score += points_for_q
 
             if hasattr(attempt, "finished_at"):
                 attempt.finished_at = datetime.utcnow()

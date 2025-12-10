@@ -31,6 +31,11 @@
             <div class="test-run-body">
                 <div class="field">
                     <label class="field-label">Текст задачи</label>
+                    {% if question.image_path %}
+                        <div class="question-image">
+                            <img src="{{ question.image_path }}" alt="question image">
+                        </div>
+                    {% endif %}
                     <div class="question-text">
                         {{ (question_html or (question.text | replace('\n', '<br>'))) | safe }}
                     </div>
@@ -66,6 +71,11 @@
                                             {{ opt.text | replace('\n', '<br>') | safe }}
                                         {% endif %}
                                     </span>
+                                    {% if opt.image_path %}
+                                        <span class="answer-option-image">
+                                            <img src="{{ opt.image_path }}" alt="option image">
+                                        </span>
+                                    {% endif %}
                                 </label>
                             {% endfor %}
                         </div>
@@ -166,6 +176,14 @@
         line-height: 1.45;
         white-space: pre-wrap;
     }
+    .page-test-run .question-image {
+        margin-bottom: 10px;
+    }
+    .page-test-run .question-image img {
+        max-width: 100%;
+        border-radius: 10px;
+        display: block;
+    }
 
     .page-test-run .field-textarea {
         width: 100%;
@@ -217,6 +235,13 @@
     .page-test-run .answer-option-text {
         font-size: 14px;
         line-height: 1.4;
+    }
+
+    .page-test-run .answer-option-image img {
+        max-width: 160px;
+        max-height: 160px;
+        display: block;
+        border-radius: 8px;
     }
 
     .page-test-run .answer-option:hover {
