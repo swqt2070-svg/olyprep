@@ -881,8 +881,8 @@ async def question_new_submit(
             if not correct_multi and valid_indices:
                 correct_multi = [valid_indices[0]]
             correct_multi = [i for i in correct_multi if 0 <= i < len(options) and options[i].strip()]
-            if not correct_multi:
-                error = "Отметьте хотя бы один правильный вариант."
+            if not correct_multi and valid_indices:
+                correct_multi = [valid_indices[0]]
     elif answer_type == "number":
         if not correct_number.strip():
             error = "Укажите правильное число."
