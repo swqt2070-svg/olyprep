@@ -135,7 +135,7 @@ def _extract_answer_values(answer: Optional[Answer]) -> tuple[Optional[int], str
 def _get_options_for_question(question: Question) -> List[SimpleNamespace]:
     """
     Строит список вариантов ответа для вопроса.
-    Возвращает SimpleNamespace(id=<int>, text=<str>).
+    Возвращает SimpleNamespace(id=<int>, text=<str>, image_path=<str|None>).
     """
     options: List[SimpleNamespace] = []
 
@@ -145,7 +145,9 @@ def _get_options_for_question(question: Question) -> List[SimpleNamespace]:
             raw_opts = json.loads(question.options)
             for idx, text in enumerate(raw_opts):
                 if text and str(text).strip():
-                    options.append(SimpleNamespace(id=idx, text=str(text)))
+                    options.append(
+                        SimpleNamespace(id=idx, text=str(text), image_path=None)
+                    )
         except Exception:
             options = []
 
@@ -154,7 +156,11 @@ def _get_options_for_question(question: Question) -> List[SimpleNamespace]:
         for opt in getattr(question, "option_items") or []:
             if opt and getattr(opt, "text", None):
                 options.append(
-                    SimpleNamespace(id=getattr(opt, "id", None), text=opt.text)
+                    SimpleNamespace(
+                        id=getattr(opt, "id", None),
+                        text=opt.text,
+                        image_path=getattr(opt, "image_path", None),
+                    )
                 )
 
     # 3) Фолбэк — question.answers (если есть старые данные)
@@ -162,7 +168,13 @@ def _get_options_for_question(question: Question) -> List[SimpleNamespace]:
         for opt in question.answers:
             text = getattr(opt, "text", None)
             if text and str(text).strip():
-                options.append(SimpleNamespace(id=getattr(opt, "id", None), text=text))
+                options.append(
+                    SimpleNamespace(
+                        id=getattr(opt, "id", None),
+                        text=text,
+                        image_path=getattr(opt, "image_path", None),
+                    )
+                )
 
     return options
 
@@ -215,7 +227,7 @@ def _recalculate_attempt_score(
                         is_correct = False
                 else:
                     is_correct = correct_str.lower() == user_val.lower()
-        elif answer_type == "multi":
+        elif answer_type in ("multi", "multiple"):
             # предполагаем, что correct хранит индексы через запятую, а в answer_text — тоже
             try:
                 correct_idxs = {
@@ -344,6 +356,19 @@ async def run_test_get(
 
     options = _get_options_for_question(question)
 
+    selected_answer_ids: List[int] = []
+    if getattr(question, "answer_type", "text") in ("multi", "multiple"):
+        raw_multi = text_answer or ""
+        if raw_multi:
+            try:
+                selected_answer_ids = [int(x) for x in raw_multi.split(",") if x.strip()]
+            except Exception:
+                selected_answer_ids = []
+        if not selected_answer_ids and selected_answer_id is not None:
+            selected_answer_ids = [selected_answer_id]
+        selected_answer_id = selected_answer_ids[0] if selected_answer_ids else None
+        text_answer = ""
+
     # HTML-версии текста вопроса и вариантов с поддержкой ![](url)
     question_html = md_to_html(getattr(question, "text", None) or "")
     answers_html = [md_to_html(getattr(opt, "text", None) or "") for opt in options]
@@ -369,7 +394,7 @@ async def run_test_get(
             "max_points": max_points_for_question,
             "answers": options,
             "selected_answer_id": selected_answer_id,
-            "selected_answer_ids": [],
+            "selected_answer_ids": selected_answer_ids,
             "answer_text": text_answer,
             "state_json": "",
             "nav": nav,
@@ -458,7 +483,7 @@ async def run_test_post(
             question_id=question.id,
         )
 
-    if answer_type == "multi":
+    if answer_type in ("multi", "multiple"):
         # храним выбранные индексы через запятую
         if multi_ids:
             ans.answer_text = ",".join(str(i) for i in sorted(set(multi_ids)))

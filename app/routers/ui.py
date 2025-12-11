@@ -859,8 +859,8 @@ async def question_new_submit(
         if not correct_text.strip():
             error = "Укажите правильный текстовый ответ."
     elif answer_type in ("single", "multi"):
-        if len(options) < 2:
-            error = "Добавьте хотя бы два варианта ответа."
+        if len(options) < 1:
+            error = "Добавьте хотя бы один вариант ответа."
         elif answer_type == "single" and correct_index == "":
             error = "Отметьте правильный вариант."
         elif answer_type == "multi":
@@ -868,6 +868,12 @@ async def question_new_submit(
                 correct_multi = [int(x) for x in form.getlist("correct_multi")]
             except Exception:
                 correct_multi = []
+            # если пользователь кликнул радио вместо чекбокса — подстрахуемся
+            if not correct_multi and correct_index not in ("", None):
+                try:
+                    correct_multi = [int(correct_index)]
+                except ValueError:
+                    correct_multi = []
             correct_multi = [i for i in correct_multi if 0 <= i < len(options)]
             if not correct_multi:
                 error = "Отметьте хотя бы один правильный вариант."
@@ -1934,5 +1940,4 @@ async def submission_set_points(
     db.commit()
 
     return RedirectResponse(url=f"/ui/submissions/{submission_id}", status_code=303)
-
 
