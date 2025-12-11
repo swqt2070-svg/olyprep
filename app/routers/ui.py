@@ -853,11 +853,54 @@ async def question_new_submit(
 
     options = collect_options(form)
 
-    if answer_type not in ("text", "single", "multi", "number"):
+    if answer_type not in ("text", "single", "multi", "number", "match"):
         error = "Неподдерживаемый тип ответа."
     elif answer_type == "text":
         if not correct_text.strip():
             error = "Укажите правильный текстовый ответ."
+    elif answer_type == "match":
+        # пары A-B
+        pairs = []
+        for k in form.keys():
+            m = re.match(r"match_left_(\d+)", k)
+            if m:
+                idx = int(m.group(1))
+                left = (form.get(k) or "").strip()
+                right = (form.get(f"match_right_{idx}") or "").strip()
+                if left and right:
+                    pairs.append({"left": left, "right": right})
+        if not pairs:
+            error = "Добавьте хотя бы одну пару для соотношения."
+    elif answer_type == "match":
+        pairs = []
+        for k in form.keys():
+            m = re.match(r"match_left_(\d+)", k)
+            if m:
+                idx = int(m.group(1))
+                left = (form.get(k) or "").strip()
+                right = (form.get(f"match_right_{idx}") or "").strip()
+                if left and right:
+                    pairs.append({"left": left, "right": right})
+        if not pairs:
+            return templates.TemplateResponse(
+                "question_edit.html",
+                {
+                    "request": request,
+                    "user": user,
+                    "question": q,
+                    "options": collect_options(form),
+                    "correct_index": None,
+                    "correct_multi": [],
+                    "correct_number": None,
+                    "match_pairs": [{"left": "", "right": ""} for _ in range(4)],
+                    "error": "Добавьте пары для соотношения",
+                    "success": None,
+                },
+                status_code=400,
+            )
+        q.answer_type = "match"
+        q.options = json.dumps(pairs, ensure_ascii=False)
+        q.correct = json.dumps(list(range(len(pairs))), ensure_ascii=False)
     elif answer_type in ("single", "multi"):
         # валидные индексы — только для реально заполненных опций
         valid_indices = [i for i, v in enumerate(options) if v.strip()]
@@ -916,6 +959,19 @@ async def question_new_submit(
         correct = correct_text.strip()
     elif answer_type == "number":
         correct = correct_number.strip()
+    elif answer_type == "match":
+        pairs = []
+        for k in form.keys():
+            m = re.match(r"match_left_(\d+)", k)
+            if m:
+                idx = int(m.group(1))
+                left = (form.get(k) or "").strip()
+                right = (form.get(f"match_right_{idx}") or "").strip()
+                if left and right:
+                    pairs.append({"left": left, "right": right})
+        options_json = json.dumps(pairs, ensure_ascii=False) if pairs else None
+        # по умолчанию соотношение 1:1 по строкам
+        correct = json.dumps(list(range(len(pairs))), ensure_ascii=False) if pairs else "[]"
     elif answer_type == "multi":
         options_json = json.dumps(options, ensure_ascii=False) if options else None
         correct = json.dumps(sorted(set(correct_multi)), ensure_ascii=False)
@@ -958,26 +1014,41 @@ async def question_edit(
     correct_number = None
     correct_index = None  # поддержка старого поля для контекста шаблона
 
-    if q.options:
-        try:
-            options = json.loads(q.options)
-        except Exception:
-            options = []
-    if q.answer_type == "single" and q.correct is not None:
-        try:
-            correct_multi = [int(str(q.correct))]
-        except ValueError:
-            correct_multi = []
-    if q.answer_type == "multi" and q.correct:
-        try:
-            correct_multi = json.loads(q.correct) if q.correct else []
-        except Exception:
-            correct_multi = []
-    if q.answer_type == "number":
-        correct_number = q.correct
+    match_pairs: list[dict] = []
 
-    while len(options) < 4:
-        options.append("")
+    if q.answer_type == "match":
+        try:
+            raw_pairs = json.loads(q.options or "[]")
+            for item in raw_pairs:
+                left = (item.get("left") if isinstance(item, dict) else None) or ""
+                right = (item.get("right") if isinstance(item, dict) else None) or ""
+                if left or right:
+                    match_pairs.append({"left": left, "right": right})
+        except Exception:
+            match_pairs = []
+        while len(match_pairs) < 4:
+            match_pairs.append({"left": "", "right": ""})
+    else:
+        if q.options:
+            try:
+                options = json.loads(q.options)
+            except Exception:
+                options = []
+        if q.answer_type == "single" and q.correct is not None:
+            try:
+                correct_multi = [int(str(q.correct))]
+            except ValueError:
+                correct_multi = []
+        if q.answer_type == "multi" and q.correct:
+            try:
+                correct_multi = json.loads(q.correct) if q.correct else []
+            except Exception:
+                correct_multi = []
+        if q.answer_type == "number":
+            correct_number = q.correct
+
+        while len(options) < 4:
+            options.append("")
 
     return templates.TemplateResponse(
         "question_edit.html",
@@ -989,6 +1060,7 @@ async def question_edit(
             "correct_index": correct_index,
             "correct_multi": correct_multi,
             "correct_number": correct_number,
+            "match_pairs": match_pairs,
             "error": None,
             "success": None,
         },

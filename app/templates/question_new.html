@@ -34,6 +34,7 @@
         const blocks = {
             text: document.getElementById('text-answer-block'),
             multi: document.getElementById('multi-answer-block'),
+            match: document.getElementById('match-answer-block'),
             number: document.getElementById('number-answer-block'),
         };
         function toggleBlocks() {
@@ -90,6 +91,9 @@
                     <input type="radio" name="answer_type" value="multi"> Варианты (один или несколько)
                 </label>
                 <label class="pill">
+                    <input type="radio" name="answer_type" value="match"> Соотношение (A ↔ B)
+                </label>
+                <label class="pill">
                     <input type="radio" name="answer_type" value="number"> Число
                 </label>
             </div>
@@ -124,6 +128,25 @@
                 <input type="number" step="any" name="correct_number" placeholder="0" data-img-target>
                 <button type="button" class="btn btn-secondary add-image-btn">+ картинка</button>
             </div>
+        </div>
+
+        <div id="match-answer-block" class="field" style="display:none;">
+            <label class="field-label">Соотношение (пары A ↔ B)</label>
+            <div class="question-options-grid">
+                {% for idx in range(4) %}
+                <div class="option-field">
+                    <div class="input-with-image" style="flex:1;">
+                        <input type="text" name="match_left_{{ idx }}" placeholder="Левая часть {{ idx + 1 }}" data-img-target>
+                        <button type="button" class="btn btn-secondary add-image-btn">+ картинка</button>
+                    </div>
+                    <div class="input-with-image" style="flex:1;">
+                        <input type="text" name="match_right_{{ idx }}" placeholder="Правая часть {{ idx + 1 }}" data-img-target>
+                        <button type="button" class="btn btn-secondary add-image-btn">+ картинка</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="muted">Пары соответствуют по строкам. Пользователь сопоставит элементы из A с элементами B.</p>
         </div>
 
         <div style="margin-top:0.9rem; display:flex; gap:0.6rem;">

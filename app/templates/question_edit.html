@@ -32,8 +32,8 @@
                             <label class="form-label" for="answer_type">Тип ответа *</label>
                             <select id="answer_type" name="answer_type" class="form-select">
                                 <option value="text" {% if question.answer_type == 'text' %}selected{% endif %}>Открытый текст</option>
-                                <option value="single" {% if question.answer_type == 'single' %}selected{% endif %}>Один вариант</option>
-                                <option value="multi" {% if question.answer_type == 'multi' %}selected{% endif %}>Несколько вариантов</option>
+                                <option value="multi" {% if question.answer_type == 'multi' %}selected{% endif %}>Варианты (один или несколько)</option>
+                                <option value="match" {% if question.answer_type == 'match' %}selected{% endif %}>Соотношение A ↔ B</option>
                                 <option value="number" {% if question.answer_type == 'number' %}selected{% endif %}>Числовой ответ</option>
                             </select>
                         </div>
@@ -76,6 +76,49 @@
                                         <td>
                                             <div class="input-with-image">
                                                 <input type="text" name="option_{{ i }}" class="form-control" data-img-target value="">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div id="block-match" class="mb-3">
+                            <label class="form-label">Соотношение (пары A ↔ B)</label>
+                            <div class="table-responsive">
+                                <table class="table table-dark table-sm align-middle mb-0">
+                                    <thead><tr><th>Левая часть</th><th>Правая часть</th></tr></thead>
+                                    <tbody>
+                                    {% for pair in match_pairs %}
+                                    <tr>
+                                        <td>
+                                            <div class="input-with-image">
+                                                <input type="text" name="match_left_{{ loop.index0 }}" class="form-control" data-img-target value="{{ pair.left }}">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="input-with-image">
+                                                <input type="text" name="match_right_{{ loop.index0 }}" class="form-control" data-img-target value="{{ pair.right }}">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    {% for i in range(match_pairs|length, match_pairs|length + 3) %}
+                                    <tr>
+                                        <td>
+                                            <div class="input-with-image">
+                                                <input type="text" name="match_left_{{ i }}" class="form-control" data-img-target value="">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="input-with-image">
+                                                <input type="text" name="match_right_{{ i }}" class="form-control" data-img-target value="">
                                                 <button type="button" class="btn btn-outline-secondary btn-sm add-image-btn">+ картинка</button>
                                             </div>
                                         </td>
@@ -137,8 +180,8 @@
     const selectType = document.getElementById('answer_type');
     const blocks = {
         text: document.getElementById('block-text'),
-        single: document.getElementById('block-single'),
         multi: document.getElementById('block-multi'),
+        match: document.getElementById('block-match'),
         number: document.getElementById('block-number'),
     };
     function updateBlocks() {

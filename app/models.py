@@ -49,6 +49,7 @@ class AnswerType(str):
     MULTI = "multi"
     TEXT = "text"
     NUMBER = "number"
+    MATCH = "match"
 
 class Question(Base):
     __tablename__ = "questions"
@@ -58,7 +59,7 @@ class Question(Base):
 
     # ??? ??????
     answer_type: Mapped[str] = Column(
-        Enum(AnswerType.SINGLE, AnswerType.MULTI, AnswerType.TEXT, AnswerType.NUMBER, name="answer_types"),
+        Enum(AnswerType.SINGLE, AnswerType.MULTI, AnswerType.TEXT, AnswerType.NUMBER, AnswerType.MATCH, name="answer_types"),
         nullable=False,
         default=AnswerType.SINGLE,
     )
@@ -253,4 +254,3 @@ class Answer(Base):
 
 Submission = TestAttempt
 TestAttemptAnswer = Answer
-
