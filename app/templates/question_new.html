@@ -82,6 +82,31 @@
         </div>
 
         <div class="field">
+            <label class="field-label">Категория</label>
+            <select name="category_id" class="field-input">
+                <option value="">Без категории</option>
+                {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if selected_category_id and selected_category_id|int == cat.id %}selected{% endif %}>{{ cat.label }}</option>
+                {% endfor %}
+            </select>
+            <div class="muted">Выберите существующую категорию или создайте новую ниже.</div>
+        </div>
+
+        <div class="field">
+            <label class="field-label">Создать новую категорию</label>
+            <div class="category-new">
+                <input type="text" name="new_category_name" placeholder="Название" value="{{ new_category_name | default('') }}">
+                <select name="new_category_parent_id">
+                    <option value="">Без родителя</option>
+                    {% for cat in categories %}
+                        <option value="{{ cat.id }}" {% if new_category_parent_id and new_category_parent_id|int == cat.id %}selected{% endif %}>{{ cat.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="muted">Если указать родителя, категория станет подкатегорией.</div>
+        </div>
+
+        <div class="field">
             <label class="field-label">Тип ответа</label>
             <div class="pill-group">
                 <label class="pill">
@@ -161,5 +186,8 @@
     .input-with-image textarea { min-height:140px; width:100%; }
     .question-options-grid { display:flex; flex-direction:column; gap:8px; }
     .option-field { display:flex; align-items:center; gap:10px; }
+    .category-new { display:flex; gap:10px; flex-wrap:wrap; }
+    .category-new input,
+    .category-new select { flex:1; min-width:220px; }
 </style>
 {% endblock %}

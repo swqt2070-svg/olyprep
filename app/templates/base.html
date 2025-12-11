@@ -473,6 +473,7 @@
                 <a href="/ui/questions" class="nav-primary">Библиотека задач</a>
                 <a href="/ui/tests" class="nav-primary">Тесты</a>
                 {% if user and user.role in ['admin', 'teacher'] %}
+                    <a href="/ui/categories" class="nav-primary">Категории</a>
                     <a href="/ui/import" class="nav-primary">Импорт</a>
                 {% endif %}
             </nav>

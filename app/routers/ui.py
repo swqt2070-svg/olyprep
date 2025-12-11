@@ -11,6 +11,7 @@
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 import json
 import io
@@ -22,10 +23,17 @@ from uuid import uuid4
 import os
 
 from app.deps import get_db, get_current_user, require_role, require_teacher_or_admin
-from app.models import User, Question, Test, TestQuestion, Submission, Answer
+from app.models import (
+    User,
+    Question,
+    Test,
+    TestQuestion,
+    Submission,
+    Answer,
+    AnswerOption,
+    Category,
+)
 from app.security import hash_password, verify_password, create_token
-from app.models import AnswerOption
-from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="app/templates")
@@ -39,6 +47,62 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 def redirect(url: str) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=status.HTTP_303_SEE_OTHER)
+
+
+# ---------- CATEGORIES HELPERS ----------
+
+
+def _fetch_categories(db: Session) -> List[Category]:
+    return (
+        db.query(Category)
+        .order_by(Category.parent_id.asc(), Category.name.asc())
+        .all()
+    )
+
+
+def _build_category_tree(categories: List[Category]) -> List[dict]:
+    by_parent: dict[Optional[int], list[Category]] = {}
+    for c in categories:
+        by_parent.setdefault(c.parent_id, []).append(c)
+    for lst in by_parent.values():
+        lst.sort(key=lambda x: (x.name or "").lower())
+
+    def walk(pid: Optional[int] = None) -> List[dict]:
+        items: list[dict] = []
+        for c in by_parent.get(pid, []):
+            items.append({"cat": c, "children": walk(c.id)})
+        return items
+
+    return walk(None)
+
+
+def _build_category_choices(categories: List[Category]) -> List[dict]:
+    by_parent: dict[Optional[int], list[Category]] = {}
+    for c in categories:
+        by_parent.setdefault(c.parent_id, []).append(c)
+    for lst in by_parent.values():
+        lst.sort(key=lambda x: (x.name or "").lower())
+
+    result: list[dict] = []
+
+    def walk(pid: Optional[int], prefix: str = "") -> None:
+        for c in by_parent.get(pid, []):
+            label = f"{prefix}{c.name}"
+            result.append({"id": c.id, "label": label})
+            walk(c.id, prefix + "— ")
+
+    walk(None, "")
+    return result
+
+
+def _category_label(obj: Question) -> str:
+    try:
+        rel = getattr(obj, "category_rel", None)
+        if rel:
+            return rel.full_path
+    except Exception:
+        pass
+    return getattr(obj, "category", None) or "Без категории"
 
 
 # ---------- UPLOADS ----------
@@ -165,6 +229,99 @@ def build_account_context(
         "student_results": student_results,
         "teacher_results": teacher_results,
     }
+
+
+# ---------- CATEGORIES UI ----------
+
+
+def _categories_page_context(
+    request: Request,
+    db: Session,
+    user: User,
+    error: Optional[str] = None,
+    success: Optional[str] = None,
+):
+    categories = _fetch_categories(db)
+    return {
+        "request": request,
+        "user": user,
+        "category_tree": _build_category_tree(categories),
+        "category_choices": _build_category_choices(categories),
+        "error": error,
+        "success": success,
+    }
+
+
+@router.get("/categories", response_class=HTMLResponse)
+async def categories_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    return templates.TemplateResponse(
+        "categories.html",
+        _categories_page_context(request, db, user),
+    )
+
+
+@router.post("/categories", response_class=HTMLResponse)
+async def categories_create(
+    request: Request,
+    name: str = Form(...),
+    parent_id: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    name = (name or "").strip()
+    parent_id_int: Optional[int] = None
+    if parent_id not in (None, "", "0"):
+        try:
+            parent_id_int = int(parent_id)
+        except ValueError:
+            parent_id_int = None
+
+    parent: Optional[Category] = None
+    if parent_id_int:
+        parent = db.get(Category, parent_id_int)
+        if not parent:
+            ctx = _categories_page_context(
+                request, db, user, error="Родительская категория не найдена."
+            )
+            return templates.TemplateResponse(
+                "categories.html",
+                ctx,
+                status_code=400,
+            )
+
+    if not name:
+        ctx = _categories_page_context(
+            request, db, user, error="Название категории обязательно."
+        )
+        return templates.TemplateResponse(
+            "categories.html",
+            ctx,
+            status_code=400,
+        )
+
+    cat = Category(name=name, parent_id=parent.id if parent else None)
+    db.add(cat)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        ctx = _categories_page_context(
+            request, db, user, error="Такая категория уже существует на этом уровне."
+        )
+        return templates.TemplateResponse(
+            "categories.html",
+            ctx,
+            status_code=400,
+        )
+
+    ctx = _categories_page_context(
+        request, db, user, success="Категория сохранена."
+    )
+    return templates.TemplateResponse("categories.html", ctx)
 
 
 # ---------- AUTH UI ----------
@@ -785,7 +942,7 @@ async def questions_list(
     library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
 
     for q in rows:
-        category = q.category or "??? ?????????"
+        category = _category_label(q)
         try:
             grade = int(q.grade) if q.grade is not None else 0
         except (TypeError, ValueError):
@@ -810,8 +967,10 @@ async def questions_list(
 @router.get("/questions/new", response_class=HTMLResponse)
 async def question_new_page(
     request: Request,
+    db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "teacher")),
 ):
+    categories = _fetch_categories(db)
     return templates.TemplateResponse(
         "question_new.html",
         {
@@ -819,6 +978,10 @@ async def question_new_page(
             "user": user,
             "error": None,
             "success": None,
+            "categories": _build_category_choices(categories),
+            "new_category_name": "",
+            "new_category_parent_id": None,
+            "selected_category_id": None,
         },
     )
 
@@ -831,12 +994,21 @@ async def question_new_submit(
     correct_text: str = Form(""),
     correct_index: str = Form(""),
     correct_number: str = Form(""),
+    category_id: Optional[str] = Form(None),
+    new_category_name: str = Form(""),
+    new_category_parent_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "teacher")),
 ):
     form = await request.form()
     error: Optional[str] = None
     answer_type = answer_type.strip()
+    new_category_name = (new_category_name or "").strip()
+    selected_category_id_raw = category_id
+    new_category_parent_id_raw = new_category_parent_id
+
+    categories_list = _fetch_categories(db)
+    category_choices = _build_category_choices(categories_list)
 
     def collect_options(form_data):
         entries = []
@@ -918,6 +1090,10 @@ async def question_new_submit(
                 "user": user,
                 "error": error,
                 "success": None,
+                "categories": category_choices,
+                "selected_category_id": selected_category_id_raw,
+                "new_category_name": new_category_name,
+                "new_category_parent_id": new_category_parent_id_raw,
             },
             status_code=400,
         )
@@ -940,11 +1116,56 @@ async def question_new_submit(
         options_json = json.dumps(options, ensure_ascii=False) if options else None
         correct = str(correct_index)
 
+    category_obj: Optional[Category] = None
+    if new_category_name:
+        parent_id: Optional[int] = None
+        if new_category_parent_id_raw not in (None, "", "0"):
+            try:
+                parent_id = int(new_category_parent_id_raw)
+            except ValueError:
+                parent_id = None
+        parent = db.get(Category, parent_id) if parent_id else None
+        category_obj = Category(name=new_category_name, parent_id=parent.id if parent else None)
+        db.add(category_obj)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            categories_list = _fetch_categories(db)
+            return templates.TemplateResponse(
+                "question_new.html",
+                {
+                    "request": request,
+                    "user": user,
+                    "error": "Категория с таким именем уже существует на этом уровне.",
+                    "success": None,
+                    "categories": _build_category_choices(categories_list),
+                    "selected_category_id": selected_category_id_raw,
+                    "new_category_name": new_category_name,
+                    "new_category_parent_id": new_category_parent_id_raw,
+                },
+                status_code=400,
+            )
+    elif selected_category_id_raw not in (None, "", "0"):
+        try:
+            category_obj = db.get(Category, int(selected_category_id_raw))
+        except ValueError:
+            category_obj = None
+
+    category_label = None
+    if category_obj:
+        try:
+            category_label = category_obj.full_path
+        except Exception:
+            category_label = category_obj.name
+
     q = Question(
         text=text,
         answer_type=answer_type,
         options=options_json,
         correct=correct,
+        category_id=category_obj.id if category_obj else None,
+        category=category_label,
     )
     db.add(q)
     db.commit()
@@ -956,6 +1177,10 @@ async def question_new_submit(
             "user": user,
             "error": None,
             "success": f"Вопрос успешно сохранён. ID: {q.id}",
+            "categories": _build_category_choices(_fetch_categories(db)),
+            "selected_category_id": None,
+            "new_category_name": "",
+            "new_category_parent_id": None,
         },
     )
 
@@ -1011,6 +1236,7 @@ async def question_edit(
         while len(options) < 4:
             options.append("")
 
+    categories = _fetch_categories(db)
     return templates.TemplateResponse(
         "question_edit.html",
         {
@@ -1024,6 +1250,11 @@ async def question_edit(
             "match_pairs": match_pairs,
             "error": None,
             "success": None,
+            "categories": _build_category_choices(categories),
+            "selected_category_id": getattr(q, "category_id", None),
+            "new_category_name": "",
+            "new_category_parent_id": None,
+            "category_label": _category_label(q),
         },
     )
 
@@ -1042,6 +1273,11 @@ async def question_edit_post(
     form = await request.form()
     text = (form.get("text") or "").strip()
     answer_type = (form.get("answer_type") or "text").strip()
+    new_category_name = (form.get("new_category_name") or "").strip()
+    selected_category_id_raw = form.get("category_id")
+    new_category_parent_id_raw = form.get("new_category_parent_id")
+    categories_list = _fetch_categories(db)
+    category_choices = _build_category_choices(categories_list)
 
     def collect_options(form_data):
         entries = []
@@ -1069,6 +1305,12 @@ async def question_edit_post(
                 "correct_number": None,
                 "error": "Текст вопроса обязателен",
                 "success": None,
+                "match_pairs": [{"left": "", "right": ""} for _ in range(4)],
+                "categories": category_choices,
+                "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
+                "new_category_name": new_category_name,
+                "new_category_parent_id": new_category_parent_id_raw,
+                "category_label": _category_label(q),
             },
         )
 
@@ -1094,6 +1336,11 @@ async def question_edit_post(
                     "match_pairs": [],
                     "error": "Укажите правильное число",
                     "success": None,
+                    "categories": category_choices,
+                    "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
+                    "new_category_name": new_category_name,
+                    "new_category_parent_id": new_category_parent_id_raw,
+                    "category_label": _category_label(q),
                 },
                 status_code=400,
             )
@@ -1113,6 +1360,11 @@ async def question_edit_post(
                     "match_pairs": [],
                     "error": "Числовой ответ должен быть числом",
                     "success": None,
+                    "categories": category_choices,
+                    "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
+                    "new_category_name": new_category_name,
+                    "new_category_parent_id": new_category_parent_id_raw,
+                    "category_label": _category_label(q),
                 },
                 status_code=400,
             )
@@ -1142,6 +1394,11 @@ async def question_edit_post(
                     "match_pairs": [{"left": "", "right": ""} for _ in range(4)],
                     "error": "Добавьте пары для соотношения",
                     "success": None,
+                    "categories": category_choices,
+                    "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
+                    "new_category_name": new_category_name,
+                    "new_category_parent_id": new_category_parent_id_raw,
+                    "category_label": _category_label(q),
                 },
                 status_code=400,
             )
@@ -1164,6 +1421,12 @@ async def question_edit_post(
                     "correct_number": None,
                     "error": "Добавьте хотя бы один вариант ответа",
                     "success": None,
+                    "match_pairs": [{"left": "", "right": ""} for _ in range(4)],
+                    "categories": category_choices,
+                    "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
+                    "new_category_name": new_category_name,
+                    "new_category_parent_id": new_category_parent_id_raw,
+                    "category_label": _category_label(q),
                 },
                 status_code=400,
             )
@@ -1205,9 +1468,70 @@ async def question_edit_post(
                 "correct_number": None,
                 "error": "Неподдерживаемый тип ответа",
                 "success": None,
+                "match_pairs": [{"left": "", "right": ""} for _ in range(4)],
+                "categories": category_choices,
+                "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
+                "new_category_name": new_category_name,
+                "new_category_parent_id": new_category_parent_id_raw,
+                "category_label": _category_label(q),
             },
             status_code=400,
         )
+
+    category_obj: Optional[Category] = None
+    if new_category_name:
+        parent_id: Optional[int] = None
+        if new_category_parent_id_raw not in (None, "", "0"):
+            try:
+                parent_id = int(new_category_parent_id_raw)
+            except ValueError:
+                parent_id = None
+        parent = db.get(Category, parent_id) if parent_id else None
+        category_obj = Category(name=new_category_name, parent_id=parent.id if parent else None)
+        db.add(category_obj)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            categories_list = _fetch_categories(db)
+            return templates.TemplateResponse(
+                "question_edit.html",
+                {
+                    "request": request,
+                    "user": user,
+                    "question": q,
+                    "options": collect_options(form),
+                    "correct_index": None,
+                    "correct_multi": [],
+                    "correct_number": None,
+                    "match_pairs": [{"left": "", "right": ""} for _ in range(4)],
+                    "error": "Категория с таким именем уже есть на этом уровне.",
+                    "success": None,
+                    "categories": _build_category_choices(categories_list),
+                    "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
+                    "new_category_name": new_category_name,
+                    "new_category_parent_id": new_category_parent_id_raw,
+                    "category_label": _category_label(q),
+                },
+                status_code=400,
+            )
+    elif selected_category_id_raw not in (None, "", "0"):
+        try:
+            category_obj = db.get(Category, int(selected_category_id_raw))
+        except ValueError:
+            category_obj = None
+    else:
+        category_obj = db.get(Category, getattr(q, "category_id", None)) if getattr(q, "category_id", None) else None
+
+    if category_obj:
+        try:
+            q.category = category_obj.full_path
+        except Exception:
+            q.category = category_obj.name
+        q.category_id = category_obj.id
+    else:
+        q.category_id = None
+        q.category = None
 
     db.add(q)
     db.commit()
@@ -1262,6 +1586,11 @@ async def question_edit_post(
             "match_pairs": match_pairs,
             "error": None,
             "success": "Изменения сохранены",
+            "categories": _build_category_choices(_fetch_categories(db)),
+            "selected_category_id": getattr(q, "category_id", None),
+            "new_category_name": "",
+            "new_category_parent_id": None,
+            "category_label": _category_label(q),
         },
     )
 
@@ -1346,7 +1675,7 @@ async def test_builder_new(
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
     library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
     for q in questions:
-        category = q.category or "??? ?????????"
+        category = _category_label(q)
         try:
             grade = int(q.grade) if q.grade is not None else 0
         except (TypeError, ValueError):
@@ -1406,7 +1735,7 @@ async def test_builder_new_post(
     if error:
         library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
         for q in questions:
-            category = q.category or "??? ?????????"
+            category = _category_label(q)
             try:
                 grade = int(q.grade) if q.grade is not None else 0
             except (TypeError, ValueError):
@@ -1469,7 +1798,7 @@ async def test_builder_edit(
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
     library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
     for q in questions:
-        category = q.category or "??? ?????????"
+        category = _category_label(q)
         try:
             grade = int(q.grade) if q.grade is not None else 0
         except (TypeError, ValueError):
@@ -1547,7 +1876,7 @@ async def test_builder_edit_post(
         selected = {tq.question_id: tq for tq in tqs}
         library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
         for q in questions:
-            category = q.category or "??? ?????????"
+            category = _category_label(q)
             try:
                 grade = int(q.grade) if q.grade is not None else 0
             except (TypeError, ValueError):

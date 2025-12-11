@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Категории{% endblock %}
+
+{% macro render_tree(nodes) %}
+    <ul class="cat-tree">
+        {% for node in nodes %}
+            <li>
+                <div class="cat-row">
+                    <span class="cat-name">{{ node.cat.full_path or node.cat.name }}</span>
+                    {% if node.cat.parent_id %}<span class="cat-meta">дочерняя</span>{% else %}<span class="cat-meta">корень</span>{% endif %}
+                </div>
+                {% if node.children %}
+                    {{ render_tree(node.children) }}
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+{% endmacro %}
+
+{% block content %}
+<div class="page-header d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Категории вопросов</h1>
+    <a href="/ui/questions" class="btn btn-outline-light">← К вопросам</a>
+</div>
+
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+
+<div class="row g-4">
+    <div class="col-lg-4 col-md-5">
+        <div class="card card-dark shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Создать категорию</h5>
+                <form method="post">
+                    <div class="mb-3">
+                        <label class="form-label">Название *</label>
+                        <input type="text" name="name" class="form-control" required placeholder="Например, Алгебра">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Родитель</label>
+                        <select name="parent_id" class="form-select">
+                            <option value="">(корень)</option>
+                            {% for c in category_choices %}
+                                <option value="{{ c.id }}">{{ c.label }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Оставьте пустым, если это корневая категория.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Сохранить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8 col-md-7">
+        <div class="card card-dark shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Дерево категорий</h5>
+                {% if not category_tree %}
+                    <p class="text-muted mb-0">Категорий пока нет.</p>
+                {% else %}
+                    {{ render_tree(category_tree) }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .cat-tree { list-style: none; padding-left: 1rem; }
+    .cat-tree ul { list-style: none; padding-left: 1.25rem; border-left: 1px solid rgba(255,255,255,0.1); margin-left: 0.35rem; }
+    .cat-row { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 4px; background: rgba(255,255,255,0.03); border-radius: 8px; }
+    .cat-name { font-weight: 600; }
+    .cat-meta { font-size: 12px; color: #aeb4c5; }
+</style>
+{% endblock %}

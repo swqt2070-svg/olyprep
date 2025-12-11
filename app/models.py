@@ -23,6 +23,38 @@ class UserRole(str):
     STUDENT = "student"
 
 
+class Category(Base):
+    __tablename__ = "categories"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = Column(String, nullable=False, index=True)
+    parent_id: Mapped[Optional[int]] = Column(
+        Integer,
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    parent: Mapped[Optional["Category"]] = relationship(
+        "Category",
+        remote_side=[id],
+        backref="children",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("parent_id", "name", name="uq_category_parent_name"),
+    )
+
+    @property
+    def full_path(self) -> str:
+        parts = [self.name]
+        cur = self.parent
+        while cur:
+            parts.append(cur.name)
+            cur = cur.parent
+        return " / ".join(reversed(parts))
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -73,6 +105,12 @@ class Question(Base):
 
     # ?????????? ??? "?????????? ?????"
     category: Mapped[Optional[str]] = Column(String, nullable=True, index=True)
+    category_id: Mapped[Optional[int]] = Column(
+        Integer,
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     grade: Mapped[Optional[str]] = Column(String, nullable=True, index=True)
     year: Mapped[Optional[str]] = Column(String, nullable=True, index=True)
     stage: Mapped[Optional[str]] = Column(String, nullable=True, index=True)
@@ -86,6 +124,8 @@ class Question(Base):
         cascade="all,delete-orphan",
         order_by="AnswerOption.id",
     )
+
+    category_rel: Mapped[Optional[Category]] = relationship("Category")
 
     # ????? ? ???????
     test_links: Mapped[List["TestQuestion"]] = relationship(

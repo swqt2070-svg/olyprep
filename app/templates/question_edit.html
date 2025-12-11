@@ -29,6 +29,31 @@
                         </div>
 
                         <div class="mb-3">
+                            <label class="form-label">Категория</label>
+                            <select name="category_id" class="form-select">
+                                <option value="">Без категории</option>
+                                {% for cat in categories %}
+                                    <option value="{{ cat.id }}" {% if selected_category_id and selected_category_id|int == cat.id %}selected{% endif %}>{{ cat.label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Выберите готовую категорию или создайте новую ниже.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Создать новую категорию</label>
+                            <div class="category-new">
+                                <input type="text" name="new_category_name" class="form-control" placeholder="Название" value="{{ new_category_name | default('') }}">
+                                <select name="new_category_parent_id" class="form-select">
+                                    <option value="">Без родителя</option>
+                                    {% for cat in categories %}
+                                        <option value="{{ cat.id }}" {% if new_category_parent_id and new_category_parent_id|int == cat.id %}selected{% endif %}>{{ cat.label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-text">Если указать родителя, категория станет подкатегорией.</div>
+                        </div>
+
+                        <div class="mb-3">
                             <label class="form-label" for="answer_type">Тип ответа *</label>
                             <select id="answer_type" name="answer_type" class="form-select">
                                 <option value="text" {% if question.answer_type == 'text' %}selected{% endif %}>Открытый текст</option>
@@ -152,7 +177,7 @@
                         </div>
                         {% endif %}
                         <div class="mb-2 small text-muted">
-                            <div><strong>Категория:</strong> {{ question.category or "—" }}</div>
+                            <div><strong>Категория:</strong> {{ category_label or "—" }}</div>
                             <div><strong>Класс:</strong> {{ question.grade or "—" }}</div>
                             <div><strong>Год:</strong> {{ question.year or "—" }}</div>
                             <div><strong>Этап:</strong> {{ question.stage or "—" }}</div>
@@ -172,6 +197,8 @@
     .question-image-preview img { width: 100%; height: auto; object-fit: contain; display: block; }
     .input-with-image { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .input-with-image .add-image-btn { white-space: nowrap; }
+    .category-new { display:flex; gap:10px; flex-wrap:wrap; }
+    .category-new input, .category-new select { flex:1; min-width:220px; }
     @media (max-width: 992px) { .question-edit-wrapper { max-width: 100%; padding: 0 1rem; } .input-with-image { flex-direction: column; align-items: stretch; } .input-with-image .add-image-btn { width: 100%; } }
 </style>
 

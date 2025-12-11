@@ -48,6 +48,7 @@ def _ensure_legacy_columns() -> None:
     Простейшая «миграция» для старой схемы SQLite:
     - добавляем columns options / correct в questions, если их не было;
     - переносим correct_answer_text -> correct, если новое поле пустое.
+    - добавляем category_id и таблицу categories для иерархии категорий.
     """
     with engine.begin() as conn:
         cols = {row[1] for row in conn.execute(text("PRAGMA table_info(questions)"))}
@@ -62,6 +63,52 @@ def _ensure_legacy_columns() -> None:
                     "WHERE (correct IS NULL OR correct='') AND correct_answer_text IS NOT NULL"
                 )
             )
+        if "category_id" not in cols:
+            conn.execute(text("ALTER TABLE questions ADD COLUMN category_id INTEGER"))
+
+        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        if "categories" not in tables:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE categories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name VARCHAR NOT NULL,
+                        parent_id INTEGER,
+                        UNIQUE(parent_id, name)
+                    )
+                    """
+                )
+            )
+
+        # создаём базовые категории из старого строкового поля, если его использовали
+        rows = conn.execute(
+            text(
+                "SELECT DISTINCT TRIM(category) FROM questions "
+                "WHERE category IS NOT NULL AND TRIM(category) <> ''"
+            )
+        ).fetchall()
+        for (cat_name,) in rows:
+            try:
+                conn.execute(
+                    text("INSERT OR IGNORE INTO categories(name, parent_id) VALUES (:name, NULL)"),
+                    {"name": cat_name},
+                )
+            except Exception:
+                pass
+
+        # заполняем связи вопросов на основе совпадения имени
+        conn.execute(
+            text(
+                """
+                UPDATE questions
+                SET category_id = (
+                    SELECT id FROM categories WHERE categories.name = questions.category LIMIT 1
+                )
+                WHERE (category_id IS NULL) AND category IS NOT NULL AND TRIM(category) <> ''
+                """
+            )
+        )
 
 
 @contextmanager
