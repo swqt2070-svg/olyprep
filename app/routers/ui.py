@@ -877,12 +877,9 @@ async def question_new_submit(
                 correct_multi = [int(x) for x in form.getlist("correct_multi")]
             except Exception:
                 correct_multi = []
-            # если пользователь кликнул радио вместо чекбокса — подстрахуемся
-            if not correct_multi and correct_index not in ("", None):
-                try:
-                    correct_multi = [int(correct_index)]
-                except ValueError:
-                    correct_multi = []
+            # если ничего не отметили — ставим первый непустой как корректный по умолчанию
+            if not correct_multi and valid_indices:
+                correct_multi = [valid_indices[0]]
             correct_multi = [i for i in correct_multi if 0 <= i < len(options) and options[i].strip()]
             if not correct_multi:
                 error = "Отметьте хотя бы один правильный вариант."
