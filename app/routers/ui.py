@@ -917,6 +917,9 @@ async def question_new_submit(
             correct_multi = [int(x) for x in form.getlist("correct_multi")]
         except Exception:
             correct_multi = []
+        valid_indices = [i for i, v in enumerate(options) if str(v).strip()]
+        if not correct_multi and valid_indices:
+            correct_multi = [valid_indices[0]]
         correct_multi = [i for i in correct_multi if 0 <= i < len(options)]
         correct = json.dumps(sorted(set(correct_multi)), ensure_ascii=False)
     elif answer_type == "single":
@@ -1085,7 +1088,8 @@ async def question_edit_post(
         q.options = None
     elif answer_type in ("single", "multi"):
         options = collect_options(form)
-        if len(options) < 2:
+        valid_indices = [i for i, v in enumerate(options) if str(v).strip()]
+        if not valid_indices:
             return templates.TemplateResponse(
                 "question_edit.html",
                 {
@@ -1096,7 +1100,7 @@ async def question_edit_post(
                     "correct_index": None,
                     "correct_multi": [],
                     "correct_number": None,
-                    "error": "Добавьте хотя бы два варианта ответа",
+                    "error": "Добавьте хотя бы один вариант ответа",
                     "success": None,
                 },
                 status_code=400,
@@ -1104,45 +1108,23 @@ async def question_edit_post(
         q.options = json.dumps(options, ensure_ascii=False) if options else None
         if answer_type == "single":
             correct_raw = form.get("correct_index")
-            if correct_raw is None or correct_raw == "":
-                return templates.TemplateResponse(
-                    "question_edit.html",
-                    {
-                        "request": request,
-                        "user": user,
-                        "question": q,
-                        "options": options,
-                        "correct_index": None,
-                        "correct_multi": [],
-                        "correct_number": None,
-                        "error": "Отметьте правильный вариант",
-                        "success": None,
-                    },
-                    status_code=400,
-                )
-            q.correct = str(correct_raw)
+            try:
+                idx_int = int(correct_raw) if correct_raw not in ("", None) else None
+            except ValueError:
+                idx_int = None
+            if idx_int is None or idx_int < 0 or idx_int >= len(options) or not options[idx_int].strip():
+                idx_int = valid_indices[0]
+            q.correct = str(idx_int)
         else:
             try:
                 correct_multi = [int(x) for x in form.getlist("correct_multi")]
             except Exception:
                 correct_multi = []
-            correct_multi = [i for i in correct_multi if 0 <= i < len(options)]
+            correct_multi = [
+                i for i in correct_multi if 0 <= i < len(options) and options[i].strip()
+            ]
             if not correct_multi:
-                return templates.TemplateResponse(
-                    "question_edit.html",
-                    {
-                        "request": request,
-                        "user": user,
-                        "question": q,
-                        "options": options,
-                        "correct_index": None,
-                        "correct_multi": [],
-                        "correct_number": None,
-                        "error": "Отметьте хотя бы один правильный вариант",
-                        "success": None,
-                    },
-                    status_code=400,
-                )
+                correct_multi = [valid_indices[0]]
             q.correct = json.dumps(sorted(set(correct_multi)), ensure_ascii=False)
     else:
         return templates.TemplateResponse(
