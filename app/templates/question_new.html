@@ -82,28 +82,49 @@
         </div>
 
         <div class="field">
-            <label class="field-label">Категория</label>
+            <label class="field-label">Категория (родитель)</label>
             <select name="category_id" class="field-input">
                 <option value="">Без категории</option>
                 {% for cat in categories %}
                     <option value="{{ cat.id }}" {% if selected_category_id and selected_category_id|int == cat.id %}selected{% endif %}>{{ cat.label }}</option>
                 {% endfor %}
             </select>
-            <div class="muted">Выберите существующую категорию или создайте новую ниже.</div>
+            <div class="muted">Создать можно только корневую категорию.</div>
         </div>
 
         <div class="field">
-            <label class="field-label">Создать новую категорию</label>
-            <div class="category-new">
-                <input type="text" name="new_category_name" placeholder="Название" value="{{ new_category_name | default('') }}">
-                <select name="new_category_parent_id">
-                    <option value="">Без родителя</option>
-                    {% for cat in categories %}
-                        <option value="{{ cat.id }}" {% if new_category_parent_id and new_category_parent_id|int == cat.id %}selected{% endif %}>{{ cat.label }}</option>
+            <label class="field-label">Создать новую категорию (корень)</label>
+            <input type="text" name="new_category_name" placeholder="Название" value="{{ new_category_name | default('') }}">
+        </div>
+
+        <div class="field grid-3">
+            <div>
+                <label class="field-label">Класс</label>
+                <select name="grade" class="field-input">
+                    <option value="">—</option>
+                    {% for g in grade_choices %}
+                        <option value="{{ g }}" {% if grade and grade == g %}selected{% endif %}>{{ g }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="muted">Если указать родителя, категория станет подкатегорией.</div>
+            <div>
+                <label class="field-label">Год</label>
+                <input list="year_choices" name="year" class="field-input" value="{{ year or '' }}" placeholder="Напр. 2024-2025">
+                <datalist id="year_choices">
+                    {% for y in year_choices %}
+                        <option value="{{ y }}">
+                    {% endfor %}
+                </datalist>
+            </div>
+            <div>
+                <label class="field-label">Этап</label>
+                <select name="stage" class="field-input">
+                    <option value="">—</option>
+                    {% for st in stage_choices %}
+                        <option value="{{ st }}" {% if stage and stage == st %}selected{% endif %}>{{ st }}</option>
+                    {% endfor %}
+                </select>
+            </div>
         </div>
 
         <div class="field">
@@ -186,8 +207,6 @@
     .input-with-image textarea { min-height:140px; width:100%; }
     .question-options-grid { display:flex; flex-direction:column; gap:8px; }
     .option-field { display:flex; align-items:center; gap:10px; }
-    .category-new { display:flex; gap:10px; flex-wrap:wrap; }
-    .category-new input,
-    .category-new select { flex:1; min-width:220px; }
+    .grid-3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
 </style>
 {% endblock %}

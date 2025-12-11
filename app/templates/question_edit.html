@@ -36,21 +36,42 @@
                                     <option value="{{ cat.id }}" {% if selected_category_id and selected_category_id|int == cat.id %}selected{% endif %}>{{ cat.label }}</option>
                                 {% endfor %}
                             </select>
-                            <div class="form-text">Выберите готовую категорию или создайте новую ниже.</div>
+                            <div class="form-text">Только корневые категории.</div>
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">Создать новую категорию</label>
-                            <div class="category-new">
-                                <input type="text" name="new_category_name" class="form-control" placeholder="Название" value="{{ new_category_name | default('') }}">
-                                <select name="new_category_parent_id" class="form-select">
-                                    <option value="">Без родителя</option>
-                                    {% for cat in categories %}
-                                        <option value="{{ cat.id }}" {% if new_category_parent_id and new_category_parent_id|int == cat.id %}selected{% endif %}>{{ cat.label }}</option>
-                                    {% endfor %}
-                                </select>
+                            <label class="form-label">Создать новую категорию (корень)</label>
+                            <input type="text" name="new_category_name" class="form-control" placeholder="Название" value="{{ new_category_name | default('') }}">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Класс / Год / Этап</label>
+                            <div class="grid-3">
+                                <div>
+                                    <select name="grade" class="form-select">
+                                        <option value="">—</option>
+                                        {% for g in grade_choices %}
+                                            <option value="{{ g }}" {% if grade and grade == g %}selected{% endif %}>{{ g }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <input list="year_choices" name="year" class="form-control" value="{{ year or '' }}" placeholder="Напр. 2024-2025">
+                                    <datalist id="year_choices">
+                                        {% for y in year_choices %}
+                                            <option value="{{ y }}">
+                                        {% endfor %}
+                                    </datalist>
+                                </div>
+                                <div>
+                                    <select name="stage" class="form-select">
+                                        <option value="">—</option>
+                                        {% for st in stage_choices %}
+                                            <option value="{{ st }}" {% if stage and stage == st %}selected{% endif %}>{{ st }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
                             </div>
-                            <div class="form-text">Если указать родителя, категория станет подкатегорией.</div>
                         </div>
 
                         <div class="mb-3">
@@ -199,6 +220,7 @@
     .input-with-image .add-image-btn { white-space: nowrap; }
     .category-new { display:flex; gap:10px; flex-wrap:wrap; }
     .category-new input, .category-new select { flex:1; min-width:220px; }
+    .grid-3 { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
     @media (max-width: 992px) { .question-edit-wrapper { max-width: 100%; padding: 0 1rem; } .input-with-image { flex-direction: column; align-items: stretch; } .input-with-image .add-image-btn { width: 100%; } }
 </style>
 

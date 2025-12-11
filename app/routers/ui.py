@@ -44,6 +44,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "static" / "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+GRADE_CHOICES = ["9", "10", "11"]
+STAGE_CHOICES = ["Школьный", "Муниципальный", "Региональный", "Заключительный"]
+
 
 def redirect(url: str) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=status.HTTP_303_SEE_OTHER)
@@ -76,7 +79,7 @@ def _build_category_tree(categories: List[Category]) -> List[dict]:
     return walk(None)
 
 
-def _build_category_choices(categories: List[Category]) -> List[dict]:
+def _build_category_choices(categories: List[Category], roots_only: bool = False) -> List[dict]:
     by_parent: dict[Optional[int], list[Category]] = {}
     for c in categories:
         by_parent.setdefault(c.parent_id, []).append(c)
@@ -96,7 +99,12 @@ def _build_category_choices(categories: List[Category]) -> List[dict]:
             result.append({"id": c.id, "label": f"{indent}{path_label}"})
             walk(c.id, prefix + "— ", depth + 1)
 
-    walk(None, "")
+    if roots_only:
+        for c in by_parent.get(None, []):
+            label = c.name
+            result.append({"id": c.id, "label": label})
+    else:
+        walk(None, "")
     return result
 
 
@@ -976,6 +984,14 @@ async def question_new_page(
     user: User = Depends(require_role("admin", "teacher")),
 ):
     categories = _fetch_categories(db)
+    years = [
+        y[0]
+        for y in db.query(Question.year)
+        .filter(Question.year.isnot(None), Question.year != "")
+        .distinct()
+        .order_by(Question.year.asc())
+        .all()
+    ]
     return templates.TemplateResponse(
         "question_new.html",
         {
@@ -983,10 +999,15 @@ async def question_new_page(
             "user": user,
             "error": None,
             "success": None,
-            "categories": _build_category_choices(categories),
+            "categories": _build_category_choices(categories, roots_only=True),
             "new_category_name": "",
-            "new_category_parent_id": None,
             "selected_category_id": None,
+            "grade_choices": GRADE_CHOICES,
+            "stage_choices": STAGE_CHOICES,
+            "year_choices": years,
+            "grade": None,
+            "year": None,
+            "stage": None,
         },
     )
 
@@ -1001,7 +1022,9 @@ async def question_new_submit(
     correct_number: str = Form(""),
     category_id: Optional[str] = Form(None),
     new_category_name: str = Form(""),
-    new_category_parent_id: Optional[str] = Form(None),
+    grade: Optional[str] = Form(None),
+    year: Optional[str] = Form(None),
+    stage: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "teacher")),
 ):
@@ -1010,10 +1033,20 @@ async def question_new_submit(
     answer_type = answer_type.strip()
     new_category_name = (new_category_name or "").strip()
     selected_category_id_raw = category_id
-    new_category_parent_id_raw = new_category_parent_id
+    grade_val = (grade or "").strip()
+    year_val = (year or "").strip()
+    stage_val = (stage or "").strip()
 
     categories_list = _fetch_categories(db)
-    category_choices = _build_category_choices(categories_list)
+    category_choices = _build_category_choices(categories_list, roots_only=True)
+    years = [
+        y[0]
+        for y in db.query(Question.year)
+        .filter(Question.year.isnot(None), Question.year != "")
+        .distinct()
+        .order_by(Question.year.asc())
+        .all()
+    ]
 
     def collect_options(form_data):
         entries = []
@@ -1087,6 +1120,12 @@ async def question_new_submit(
             except ValueError:
                 error = "Числовой ответ должен быть числом."
 
+    if error is None:
+        if grade_val and grade_val not in GRADE_CHOICES:
+            error = "Класс должен быть 9, 10 или 11."
+        if stage_val and stage_val not in STAGE_CHOICES:
+            error = "Этап должен быть выбран из списка."
+
     if error:
         return templates.TemplateResponse(
             "question_new.html",
@@ -1098,7 +1137,12 @@ async def question_new_submit(
                 "categories": category_choices,
                 "selected_category_id": selected_category_id_raw,
                 "new_category_name": new_category_name,
-                "new_category_parent_id": new_category_parent_id_raw,
+                "grade_choices": GRADE_CHOICES,
+                "stage_choices": STAGE_CHOICES,
+                "year_choices": years,
+                "grade": grade_val,
+                "year": year_val,
+                "stage": stage_val,
             },
             status_code=400,
         )
@@ -1123,14 +1167,7 @@ async def question_new_submit(
 
     category_obj: Optional[Category] = None
     if new_category_name:
-        parent_id: Optional[int] = None
-        if new_category_parent_id_raw not in (None, "", "0"):
-            try:
-                parent_id = int(new_category_parent_id_raw)
-            except ValueError:
-                parent_id = None
-        parent = db.get(Category, parent_id) if parent_id else None
-        category_obj = Category(name=new_category_name, parent_id=parent.id if parent else None)
+        category_obj = Category(name=new_category_name, parent_id=None)
         db.add(category_obj)
         try:
             db.flush()
@@ -1144,10 +1181,15 @@ async def question_new_submit(
                     "user": user,
                     "error": "Категория с таким именем уже существует на этом уровне.",
                     "success": None,
-                    "categories": _build_category_choices(categories_list),
+                    "categories": _build_category_choices(categories_list, roots_only=True),
                     "selected_category_id": selected_category_id_raw,
                     "new_category_name": new_category_name,
-                    "new_category_parent_id": new_category_parent_id_raw,
+                    "grade_choices": GRADE_CHOICES,
+                    "stage_choices": STAGE_CHOICES,
+                    "year_choices": years,
+                    "grade": grade_val,
+                    "year": year_val,
+                    "stage": stage_val,
                 },
                 status_code=400,
             )
@@ -1171,6 +1213,9 @@ async def question_new_submit(
         correct=correct,
         category_id=category_obj.id if category_obj else None,
         category=category_label,
+        grade=grade_val or None,
+        year=year_val or None,
+        stage=stage_val or None,
     )
     db.add(q)
     db.commit()
@@ -1182,10 +1227,15 @@ async def question_new_submit(
             "user": user,
             "error": None,
             "success": f"Вопрос успешно сохранён. ID: {q.id}",
-            "categories": _build_category_choices(_fetch_categories(db)),
+            "categories": _build_category_choices(_fetch_categories(db), roots_only=True),
             "selected_category_id": None,
             "new_category_name": "",
-            "new_category_parent_id": None,
+            "grade_choices": GRADE_CHOICES,
+            "stage_choices": STAGE_CHOICES,
+            "year_choices": years,
+            "grade": None,
+            "year": None,
+            "stage": None,
         },
     )
 
@@ -1241,6 +1291,14 @@ async def question_edit(
         while len(options) < 4:
             options.append("")
 
+    years = [
+        y[0]
+        for y in db.query(Question.year)
+        .filter(Question.year.isnot(None), Question.year != "")
+        .distinct()
+        .order_by(Question.year.asc())
+        .all()
+    ]
     categories = _fetch_categories(db)
     return templates.TemplateResponse(
         "question_edit.html",
@@ -1255,11 +1313,16 @@ async def question_edit(
             "match_pairs": match_pairs,
             "error": None,
             "success": None,
-            "categories": _build_category_choices(categories),
+            "categories": _build_category_choices(categories, roots_only=True),
             "selected_category_id": getattr(q, "category_id", None),
             "new_category_name": "",
-            "new_category_parent_id": None,
             "category_label": _category_label(q),
+            "grade_choices": GRADE_CHOICES,
+            "stage_choices": STAGE_CHOICES,
+            "year_choices": years,
+            "grade": getattr(q, "grade", None),
+            "year": getattr(q, "year", None),
+            "stage": getattr(q, "stage", None),
         },
     )
 
@@ -1280,9 +1343,19 @@ async def question_edit_post(
     answer_type = (form.get("answer_type") or "text").strip()
     new_category_name = (form.get("new_category_name") or "").strip()
     selected_category_id_raw = form.get("category_id")
-    new_category_parent_id_raw = form.get("new_category_parent_id")
+    grade_val = (form.get("grade") or "").strip()
+    year_val = (form.get("year") or "").strip()
+    stage_val = (form.get("stage") or "").strip()
     categories_list = _fetch_categories(db)
-    category_choices = _build_category_choices(categories_list)
+    category_choices = _build_category_choices(categories_list, roots_only=True)
+    years = [
+        y[0]
+        for y in db.query(Question.year)
+        .filter(Question.year.isnot(None), Question.year != "")
+        .distinct()
+        .order_by(Question.year.asc())
+        .all()
+    ]
 
     def collect_options(form_data):
         entries = []
@@ -1314,8 +1387,13 @@ async def question_edit_post(
                 "categories": category_choices,
                 "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
                 "new_category_name": new_category_name,
-                "new_category_parent_id": new_category_parent_id_raw,
                 "category_label": _category_label(q),
+                "grade_choices": GRADE_CHOICES,
+                "stage_choices": STAGE_CHOICES,
+                "year_choices": years,
+                "grade": grade_val or getattr(q, "grade", None),
+                "year": year_val or getattr(q, "year", None),
+                "stage": stage_val or getattr(q, "stage", None),
             },
         )
 
@@ -1344,8 +1422,13 @@ async def question_edit_post(
                     "categories": category_choices,
                     "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
                     "new_category_name": new_category_name,
-                    "new_category_parent_id": new_category_parent_id_raw,
                     "category_label": _category_label(q),
+                    "grade_choices": GRADE_CHOICES,
+                    "stage_choices": STAGE_CHOICES,
+                    "year_choices": years,
+                    "grade": grade_val or getattr(q, "grade", None),
+                    "year": year_val or getattr(q, "year", None),
+                    "stage": stage_val or getattr(q, "stage", None),
                 },
                 status_code=400,
             )
@@ -1368,8 +1451,13 @@ async def question_edit_post(
                     "categories": category_choices,
                     "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
                     "new_category_name": new_category_name,
-                    "new_category_parent_id": new_category_parent_id_raw,
                     "category_label": _category_label(q),
+                    "grade_choices": GRADE_CHOICES,
+                    "stage_choices": STAGE_CHOICES,
+                    "year_choices": years,
+                    "grade": grade_val or getattr(q, "grade", None),
+                    "year": year_val or getattr(q, "year", None),
+                    "stage": stage_val or getattr(q, "stage", None),
                 },
                 status_code=400,
             )
@@ -1402,8 +1490,13 @@ async def question_edit_post(
                     "categories": category_choices,
                     "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
                     "new_category_name": new_category_name,
-                    "new_category_parent_id": new_category_parent_id_raw,
                     "category_label": _category_label(q),
+                    "grade_choices": GRADE_CHOICES,
+                    "stage_choices": STAGE_CHOICES,
+                    "year_choices": years,
+                    "grade": grade_val or getattr(q, "grade", None),
+                    "year": year_val or getattr(q, "year", None),
+                    "stage": stage_val or getattr(q, "stage", None),
                 },
                 status_code=400,
             )
@@ -1430,8 +1523,13 @@ async def question_edit_post(
                     "categories": category_choices,
                     "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
                     "new_category_name": new_category_name,
-                    "new_category_parent_id": new_category_parent_id_raw,
                     "category_label": _category_label(q),
+                    "grade_choices": GRADE_CHOICES,
+                    "stage_choices": STAGE_CHOICES,
+                    "year_choices": years,
+                    "grade": grade_val or getattr(q, "grade", None),
+                    "year": year_val or getattr(q, "year", None),
+                    "stage": stage_val or getattr(q, "stage", None),
                 },
                 status_code=400,
             )
@@ -1477,22 +1575,75 @@ async def question_edit_post(
                 "categories": category_choices,
                 "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
                 "new_category_name": new_category_name,
-                "new_category_parent_id": new_category_parent_id_raw,
                 "category_label": _category_label(q),
+                "grade_choices": GRADE_CHOICES,
+                "stage_choices": STAGE_CHOICES,
+                "year_choices": years,
+                "grade": grade_val or getattr(q, "grade", None),
+                "year": year_val or getattr(q, "year", None),
+                "stage": stage_val or getattr(q, "stage", None),
+            },
+            status_code=400,
+        )
+
+    if grade_val and grade_val not in GRADE_CHOICES:
+        return templates.TemplateResponse(
+            "question_edit.html",
+            {
+                "request": request,
+                "user": user,
+                "question": q,
+                "options": collect_options(form),
+                "correct_index": None,
+                "correct_multi": [],
+                "correct_number": None,
+                "match_pairs": [{"left": "", "right": ""} for _ in range(4)],
+                "error": "Класс должен быть 9, 10 или 11.",
+                "success": None,
+                "categories": category_choices,
+                "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
+                "new_category_name": new_category_name,
+                "category_label": _category_label(q),
+                "grade_choices": GRADE_CHOICES,
+                "stage_choices": STAGE_CHOICES,
+                "year_choices": years,
+                "grade": grade_val or getattr(q, "grade", None),
+                "year": year_val or getattr(q, "year", None),
+                "stage": stage_val or getattr(q, "stage", None),
+            },
+            status_code=400,
+        )
+    if stage_val and stage_val not in STAGE_CHOICES:
+        return templates.TemplateResponse(
+            "question_edit.html",
+            {
+                "request": request,
+                "user": user,
+                "question": q,
+                "options": collect_options(form),
+                "correct_index": None,
+                "correct_multi": [],
+                "correct_number": None,
+                "match_pairs": [{"left": "", "right": ""} for _ in range(4)],
+                "error": "Этап должен быть выбран из списка.",
+                "success": None,
+                "categories": category_choices,
+                "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
+                "new_category_name": new_category_name,
+                "category_label": _category_label(q),
+                "grade_choices": GRADE_CHOICES,
+                "stage_choices": STAGE_CHOICES,
+                "year_choices": years,
+                "grade": grade_val or getattr(q, "grade", None),
+                "year": year_val or getattr(q, "year", None),
+                "stage": stage_val or getattr(q, "stage", None),
             },
             status_code=400,
         )
 
     category_obj: Optional[Category] = None
     if new_category_name:
-        parent_id: Optional[int] = None
-        if new_category_parent_id_raw not in (None, "", "0"):
-            try:
-                parent_id = int(new_category_parent_id_raw)
-            except ValueError:
-                parent_id = None
-        parent = db.get(Category, parent_id) if parent_id else None
-        category_obj = Category(name=new_category_name, parent_id=parent.id if parent else None)
+        category_obj = Category(name=new_category_name, parent_id=None)
         db.add(category_obj)
         try:
             db.flush()
@@ -1512,11 +1663,16 @@ async def question_edit_post(
                     "match_pairs": [{"left": "", "right": ""} for _ in range(4)],
                     "error": "Категория с таким именем уже есть на этом уровне.",
                     "success": None,
-                    "categories": _build_category_choices(categories_list),
+                    "categories": _build_category_choices(categories_list, roots_only=True),
                     "selected_category_id": selected_category_id_raw or getattr(q, "category_id", None),
                     "new_category_name": new_category_name,
-                    "new_category_parent_id": new_category_parent_id_raw,
                     "category_label": _category_label(q),
+                    "grade_choices": GRADE_CHOICES,
+                    "stage_choices": STAGE_CHOICES,
+                    "year_choices": years,
+                    "grade": grade_val or getattr(q, "grade", None),
+                    "year": year_val or getattr(q, "year", None),
+                    "stage": stage_val or getattr(q, "stage", None),
                 },
                 status_code=400,
             )
@@ -1537,6 +1693,10 @@ async def question_edit_post(
     else:
         q.category_id = None
         q.category = None
+
+    q.grade = grade_val or None
+    q.year = year_val or None
+    q.stage = stage_val or None
 
     db.add(q)
     db.commit()
@@ -1591,11 +1751,16 @@ async def question_edit_post(
             "match_pairs": match_pairs,
             "error": None,
             "success": "Изменения сохранены",
-            "categories": _build_category_choices(_fetch_categories(db)),
+            "categories": _build_category_choices(_fetch_categories(db), roots_only=True),
             "selected_category_id": getattr(q, "category_id", None),
             "new_category_name": "",
-            "new_category_parent_id": None,
             "category_label": _category_label(q),
+            "grade_choices": GRADE_CHOICES,
+            "stage_choices": STAGE_CHOICES,
+            "year_choices": years,
+            "grade": getattr(q, "grade", None),
+            "year": getattr(q, "year", None),
+            "stage": getattr(q, "stage", None),
         },
     )
 
