@@ -49,13 +49,15 @@
                         <div class="match-grid">
                             <div class="match-left">
                                 {% for item in match_left %}
+                                    {% set left_idx = loop.index0 %}
+                                    {% set selected_for_row = match_selected[left_idx] if match_selected and left_idx < match_selected|length else None %}
                                     <div class="match-row">
                                         <div class="match-left-text">{{ item.text }}</div>
                                         <select name="match_choice_{{ item.index }}" class="field-input">
                                             <option value="">—</option>
                                             {% for r in match_right %}
                                                 <option value="{{ r.index }}"
-                                                    {% if match_selected and match_selected[loop.parentloop.index0] == r.index %}selected{% endif %}>
+                                                    {% if selected_for_row is not none and selected_for_row == r.index %}selected{% endif %}>
                                                     {{ r.text }}
                                                 </option>
                                             {% endfor %}
