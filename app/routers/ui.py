@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 from typing import List, Optional
 import json
 import io
@@ -1834,6 +1835,101 @@ async def tests_list(
         "tests_list.html",
         {"request": request, "user": user, "tests": tests, "test_info": info, "role": role},
     )
+
+
+@router.get("/tests/random", response_class=HTMLResponse)
+async def random_test_form(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    categories = _build_category_choices(_fetch_categories(db), roots_only=True)
+    return templates.TemplateResponse(
+        "random_test.html",
+        {
+            "request": request,
+            "user": user,
+            "categories": categories,
+            "grade_choices": GRADE_CHOICES,
+            "error": None,
+        },
+    )
+
+
+@router.post("/tests/random", response_class=HTMLResponse)
+async def random_test_submit(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    form = await request.form()
+    selected_categories: list[int] = []
+    for v in form.getlist("category_ids"):
+        try:
+            selected_categories.append(int(v))
+        except Exception:
+            continue
+    grade_val = (form.get("grade") or "").strip()
+    try:
+        count = int(form.get("count") or 10)
+    except ValueError:
+        count = 10
+    count = max(1, min(count, 50))
+
+    if grade_val and grade_val not in GRADE_CHOICES:
+        grade_val = ""
+
+    query = db.query(Question)
+    if selected_categories:
+        query = query.filter(Question.category_id.in_(selected_categories))
+    if grade_val:
+        query = query.filter(Question.grade == grade_val)
+
+    questions = query.order_by(func.random()).limit(count).all()
+    if not questions:
+        categories = _build_category_choices(_fetch_categories(db), roots_only=True)
+        return templates.TemplateResponse(
+            "random_test.html",
+            {
+                "request": request,
+                "user": user,
+                "categories": categories,
+                "grade_choices": GRADE_CHOICES,
+                "error": "Не найдено ни одного вопроса по выбранным условиям.",
+                "selected_categories": selected_categories,
+                "grade": grade_val,
+                "count": count,
+            },
+            status_code=400,
+        )
+
+    title_parts = ["Случайный тест"]
+    if grade_val:
+        title_parts.append(f"{grade_val} класс")
+    test = Test(
+        title=" / ".join(title_parts),
+        description="Автосгенерированный тест по выбранным категориям",
+        created_by_id=user.id if hasattr(user, "id") else None,
+        is_public=False,
+        show_answers_to_student=True,
+    )
+    db.add(test)
+    db.flush()
+
+    order = 0
+    for q in questions:
+        order += 1
+        db.add(
+            TestQuestion(
+                test_id=test.id,
+                question_id=q.id,
+                points=1,
+                order=order,
+            )
+        )
+    db.commit()
+
+    return redirect(f"/ui/tests/run/{test.id}")
 
 
 @router.get("/tests/new", response_class=HTMLResponse)

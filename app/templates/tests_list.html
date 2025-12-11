@@ -6,11 +6,12 @@
 <div class="page-container">
     <h1 class="page-title">Тесты</h1>
 
-    {% if role in ["teacher", "admin"] %}
-        <div class="actions-bar">
+    <div class="actions-bar">
+        {% if role in ["teacher", "admin"] %}
             <a href="/ui/tests/new" class="btn btn-primary">Создать тест</a>
-        </div>
-    {% endif %}
+        {% endif %}
+        <a href="/ui/tests/random" class="btn btn-secondary">Случайный тест</a>
+    </div>
 
     {% if test_info %}
         <div class="card">
