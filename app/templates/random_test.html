@@ -13,15 +13,19 @@
             <div class="field">
                 <label class="field-label">Категории (корневые)</label>
                 <div class="checkbox-grid">
-                    {% for cat in categories %}
-                        <label class="checkbox">
-                            <input type="checkbox"
-                                   name="category_ids"
-                                   value="{{ cat.id }}"
-                                   {% if selected_categories and cat.id in selected_categories %}checked{% endif %}>
-                            <span>{{ cat.label }}</span>
-                        </label>
-                    {% endfor %}
+                    {% if categories %}
+                        {% for cat in categories %}
+                            <label class="checkbox">
+                                <input type="checkbox"
+                                       name="category_ids"
+                                       value="{{ cat.id }}"
+                                       {% if selected_categories and cat.id in selected_categories %}checked{% endif %}>
+                                <span>{{ cat.label }}</span>
+                            </label>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-muted">Нет доступных категорий.</div>
+                    {% endif %}
                 </div>
                 <div class="muted">Если ничего не выбрать — возьмём из всех категорий.</div>
             </div>

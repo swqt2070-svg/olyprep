@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func
+from sqlalchemy import func, or_, not_
 from typing import List, Optional
 import json
 import io
@@ -107,6 +107,10 @@ def _build_category_choices(categories: List[Category], roots_only: bool = False
     else:
         walk(None, "")
     return result
+
+
+def _get_root_category_choices(db: Session) -> List[dict]:
+    return _build_category_choices(_fetch_categories(db), roots_only=True)
 
 
 def _category_label(obj: Question) -> str:
@@ -1815,7 +1819,17 @@ async def tests_list(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    tests = db.query(Test).order_by(Test.id.desc()).all()
+    role = user.role if user else None
+    query = db.query(Test)
+    if role not in ("teacher", "admin"):
+        # скрываем автогенерированные случайные тесты для студентов
+        query = query.filter(
+            or_(
+                Test.description.is_(None),
+                not_(Test.description.ilike("Автосгенерированный%")),
+            )
+        )
+    tests = query.order_by(Test.id.desc()).all()
     info = []
     for t in tests:
         tqs: List[TestQuestion] = (
@@ -1830,7 +1844,6 @@ async def tests_list(
                 "max_score": sum(tq.points for tq in tqs) if tqs else 0,
             }
         )
-    role = user.role if user else None
     return templates.TemplateResponse(
         "tests_list.html",
         {"request": request, "user": user, "tests": tests, "test_info": info, "role": role},
@@ -1843,7 +1856,7 @@ async def random_test_form(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    categories = _build_category_choices(_fetch_categories(db), roots_only=True)
+    categories = _get_root_category_choices(db)
     return templates.TemplateResponse(
         "random_test.html",
         {
@@ -1851,6 +1864,9 @@ async def random_test_form(
             "user": user,
             "categories": categories,
             "grade_choices": GRADE_CHOICES,
+            "selected_categories": [],
+            "grade": None,
+            "count": 10,
             "error": None,
         },
     )
@@ -1887,7 +1903,7 @@ async def random_test_submit(
 
     questions = query.order_by(func.random()).limit(count).all()
     if not questions:
-        categories = _build_category_choices(_fetch_categories(db), roots_only=True)
+        categories = _get_root_category_choices(db)
         return templates.TemplateResponse(
             "random_test.html",
             {
