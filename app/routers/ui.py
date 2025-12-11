@@ -85,11 +85,16 @@ def _build_category_choices(categories: List[Category]) -> List[dict]:
 
     result: list[dict] = []
 
-    def walk(pid: Optional[int], prefix: str = "") -> None:
+    def walk(pid: Optional[int], prefix: str = "", depth: int = 0) -> None:
         for c in by_parent.get(pid, []):
-            label = f"{prefix}{c.name}"
-            result.append({"id": c.id, "label": label})
-            walk(c.id, prefix + "— ")
+            path_label = ""
+            try:
+                path_label = c.full_path
+            except Exception:
+                path_label = c.name
+            indent = "— " * depth
+            result.append({"id": c.id, "label": f"{indent}{path_label}"})
+            walk(c.id, prefix + "— ", depth + 1)
 
     walk(None, "")
     return result
