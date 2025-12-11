@@ -863,26 +863,31 @@ async def question_new_submit(
         valid_indices = [i for i, v in enumerate(options) if v.strip()]
         if not valid_indices:
             error = "Добавьте хотя бы один вариант ответа."
-        elif answer_type == "single":
+        else:
+            selected: set[int] = set()
+            # чекбоксы
             try:
-                idx_int = int(correct_index)
-            except ValueError:
-                idx_int = None
-            # если не выбрали или выбрали пустую/невалидную позицию — берём первую непустую
-            if idx_int is None or idx_int < 0 or idx_int >= len(options) or not options[idx_int].strip():
-                idx_int = valid_indices[0]
-            correct_index = str(idx_int)
-        elif answer_type == "multi":
-            try:
-                correct_multi = [int(x) for x in form.getlist("correct_multi")]
+                selected.update(int(x) for x in form.getlist("correct_multi"))
             except Exception:
-                correct_multi = []
-            # если ничего не отметили — ставим первый непустой как корректный по умолчанию
-            if not correct_multi and valid_indices:
-                correct_multi = [valid_indices[0]]
-            correct_multi = [i for i in correct_multi if 0 <= i < len(options) and options[i].strip()]
-            if not correct_multi and valid_indices:
-                correct_multi = [valid_indices[0]]
+                pass
+            # радиокнопка
+            if correct_index not in ("", None):
+                try:
+                    selected.add(int(correct_index))
+                except ValueError:
+                    pass
+            # фильтрация по существующим и непустым вариантам
+            selected = {i for i in selected if 0 <= i < len(options) and options[i].strip()}
+            if not selected:
+                # подстрахуемся: берём первый непустой вариант
+                selected = {valid_indices[0]}
+            normalized = sorted(selected)
+            # решаем финальный тип: 1 вариант => single, иначе multi
+            answer_type = "single" if len(normalized) == 1 else "multi"
+            if answer_type == "single":
+                correct_index = str(normalized[0])
+            else:
+                correct_multi = normalized
     elif answer_type == "number":
         if not correct_number.strip():
             error = "Укажите правильное число."
@@ -913,14 +918,6 @@ async def question_new_submit(
         correct = correct_number.strip()
     elif answer_type == "multi":
         options_json = json.dumps(options, ensure_ascii=False) if options else None
-        try:
-            correct_multi = [int(x) for x in form.getlist("correct_multi")]
-        except Exception:
-            correct_multi = []
-        valid_indices = [i for i, v in enumerate(options) if str(v).strip()]
-        if not correct_multi and valid_indices:
-            correct_multi = [valid_indices[0]]
-        correct_multi = [i for i in correct_multi if 0 <= i < len(options)]
         correct = json.dumps(sorted(set(correct_multi)), ensure_ascii=False)
     elif answer_type == "single":
         options_json = json.dumps(options, ensure_ascii=False) if options else None
@@ -1106,26 +1103,29 @@ async def question_edit_post(
                 status_code=400,
             )
         q.options = json.dumps(options, ensure_ascii=False) if options else None
-        if answer_type == "single":
-            correct_raw = form.get("correct_index")
+
+        selected: set[int] = set()
+        try:
+            selected.update(int(x) for x in form.getlist("correct_multi"))
+        except Exception:
+            pass
+        correct_raw = form.get("correct_index")
+        if correct_raw not in ("", None):
             try:
-                idx_int = int(correct_raw) if correct_raw not in ("", None) else None
+                selected.add(int(correct_raw))
             except ValueError:
-                idx_int = None
-            if idx_int is None or idx_int < 0 or idx_int >= len(options) or not options[idx_int].strip():
-                idx_int = valid_indices[0]
-            q.correct = str(idx_int)
+                pass
+
+        selected = {i for i in selected if 0 <= i < len(options) and options[i].strip()}
+        if not selected:
+            selected = {valid_indices[0]}
+
+        normalized = sorted(selected)
+        answer_type = "single" if len(normalized) == 1 else "multi"
+        if answer_type == "single":
+            q.correct = str(normalized[0])
         else:
-            try:
-                correct_multi = [int(x) for x in form.getlist("correct_multi")]
-            except Exception:
-                correct_multi = []
-            correct_multi = [
-                i for i in correct_multi if 0 <= i < len(options) and options[i].strip()
-            ]
-            if not correct_multi:
-                correct_multi = [valid_indices[0]]
-            q.correct = json.dumps(sorted(set(correct_multi)), ensure_ascii=False)
+            q.correct = json.dumps(normalized, ensure_ascii=False)
     else:
         return templates.TemplateResponse(
             "question_edit.html",
