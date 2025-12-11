@@ -956,6 +956,7 @@ async def question_edit(
     options = []
     correct_multi: list[int] = []
     correct_number = None
+    correct_index = None  # поддержка старого поля для контекста шаблона
 
     if q.options:
         try:
