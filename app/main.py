@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import jwt
 
-from app.database import Base, engine
+from app.database import Base, engine, init_db
 from app.config import settings
 from app import models
 from app.routers import auth, users, questions, ui, tests_new  # ← ДОБАВЛЕН ui
@@ -16,7 +16,8 @@ from app.routers import auth, users, questions, ui, tests_new  # ← ДОБАВ�
 app = FastAPI(title="OlyPrep MVP")
 templates = Jinja2Templates(directory="app/templates")
 
-Base.metadata.create_all(bind=engine)
+# Создаём/мигрируем БД (добавляет options/correct при необходимости)
+init_db()
 
 # static files (for uploads)
 static_dir = Path(__file__).resolve().parent / "static"
