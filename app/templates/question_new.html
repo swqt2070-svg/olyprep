@@ -33,7 +33,6 @@
         }
         const blocks = {
             text: document.getElementById('text-answer-block'),
-            single: document.getElementById('single-answer-block'),
             multi: document.getElementById('multi-answer-block'),
             number: document.getElementById('number-answer-block'),
         };
@@ -88,10 +87,7 @@
                     <input type="radio" name="answer_type" value="text" checked> Текст
                 </label>
                 <label class="pill">
-                    <input type="radio" name="answer_type" value="single"> Один вариант
-                </label>
-                <label class="pill">
-                    <input type="radio" name="answer_type" value="multi"> Несколько вариантов
+                    <input type="radio" name="answer_type" value="multi"> Варианты (один или несколько)
                 </label>
                 <label class="pill">
                     <input type="radio" name="answer_type" value="number"> Число
@@ -107,24 +103,8 @@
             </div>
         </div>
 
-        <div id="single-answer-block" class="field" style="display:none;">
-            <label class="field-label">Варианты ответа</label>
-            <div class="question-options-grid">
-                {% for idx in range(4) %}
-                <div class="option-field">
-                    <input type="radio" name="correct_index" value="{{ idx }}">
-                    <div class="input-with-image">
-                        <input type="text" name="option_{{ idx }}" placeholder="Вариант {{ idx + 1 }}" data-img-target>
-                        <button type="button" class="btn btn-secondary add-image-btn">+ картинка</button>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            <p class="muted">Отметьте один правильный вариант.</p>
-        </div>
-
         <div id="multi-answer-block" class="field" style="display:none;">
-            <label class="field-label">Варианты ответа (несколько верных)</label>
+            <label class="field-label">Варианты ответа (отметьте один или несколько)</label>
             <div class="question-options-grid">
                 {% for idx in range(4) %}
                 <div class="option-field">

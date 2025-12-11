@@ -954,7 +954,6 @@ async def question_edit(
         raise HTTPException(status_code=404, detail="Question not found")
 
     options = []
-    correct_index = None
     correct_multi: list[int] = []
     correct_number = None
 
@@ -965,9 +964,9 @@ async def question_edit(
             options = []
     if q.answer_type == "single" and q.correct is not None:
         try:
-            correct_index = int(str(q.correct))
+            correct_multi = [int(str(q.correct))]
         except ValueError:
-            correct_index = None
+            correct_multi = []
     if q.answer_type == "multi" and q.correct:
         try:
             correct_multi = json.loads(q.correct) if q.correct else []
@@ -1122,6 +1121,7 @@ async def question_edit_post(
 
         normalized = sorted(selected)
         answer_type = "single" if len(normalized) == 1 else "multi"
+        q.answer_type = answer_type
         if answer_type == "single":
             q.correct = str(normalized[0])
         else:
