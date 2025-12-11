@@ -43,7 +43,29 @@
 
                 {% set answer_type = question.answer_type | default('text') %}
                 {% set is_multiple = (answer_type == 'multiple' or answer_type == 'multi') %}
-                {% if answers|length > 0 and answer_type != 'text' and answer_type != 'number' %}
+                {% if answer_type == 'match' %}
+                    <div class="field">
+                        <label class="field-label">Соотнесите элементы</label>
+                        <div class="match-grid">
+                            <div class="match-left">
+                                {% for item in match_left %}
+                                    <div class="match-row">
+                                        <div class="match-left-text">{{ item.text }}</div>
+                                        <select name="match_choice_{{ item.index }}" class="field-input">
+                                            <option value="">—</option>
+                                            {% for r in match_right %}
+                                                <option value="{{ r.index }}"
+                                                    {% if match_selected and match_selected[loop.parentloop.index0] == r.index %}selected{% endif %}>
+                                                    {{ r.text }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                {% elif answers|length > 0 and answer_type != 'text' and answer_type != 'number' %}
                     <div class="field">
                         <label class="field-label">
                             {% if is_multiple %}Выберите один или несколько вариантов{% else %}Выберите один вариант{% endif %}
@@ -242,6 +264,32 @@
         max-height: 160px;
         display: block;
         border-radius: 8px;
+    }
+
+    .match-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .match-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        background: rgba(255,255,255,0.02);
+        padding: 8px 10px;
+        border-radius: 8px;
+    }
+    .match-left-text {
+        flex: 1;
+        font-weight: 500;
+    }
+    .match-row select {
+        min-width: 180px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(7,11,25,0.9);
+        color: #fff;
+        padding: 6px 8px;
     }
 
     .page-test-run .answer-option:hover {

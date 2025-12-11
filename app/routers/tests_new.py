@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 
 import json
 import re
+import random
 from types import SimpleNamespace
 
 from fastapi import (
@@ -227,6 +228,25 @@ def _recalculate_attempt_score(
                         is_correct = False
                 else:
                     is_correct = correct_str.lower() == user_val.lower()
+        elif answer_type == "match":
+            try:
+                correct_list = json.loads(q.correct or "[]")
+            except Exception:
+                correct_list = []
+            try:
+                user_list = json.loads(getattr(ans, "answer_text", "") or "[]")
+            except Exception:
+                user_list = []
+            if (
+                isinstance(correct_list, list)
+                and isinstance(user_list, list)
+                and len(correct_list) == len(user_list)
+                and all(
+                    (user_list[i] is not None) and (int(user_list[i]) == int(correct_list[i]))
+                    for i in range(len(correct_list))
+                )
+            ):
+                is_correct = True
         elif answer_type in ("multi", "multiple"):
             # предполагаем, что correct хранит индексы через запятую, а в answer_text — тоже
             try:
@@ -357,17 +377,41 @@ async def run_test_get(
     options = _get_options_for_question(question)
 
     selected_answer_ids: List[int] = []
-    if getattr(question, "answer_type", "text") in ("multi", "multiple"):
-        raw_multi = text_answer or ""
-        if raw_multi:
+    match_left: List[dict] = []
+    match_right: List[dict] = []
+    match_selected: List[Optional[int]] = []
+
+    if getattr(question, "answer_type", "text") == "match":
+        try:
+            pairs = json.loads(question.options or "[]")
+        except Exception:
+            pairs = []
+        for idx, pair in enumerate(pairs):
+            left = (pair.get("left") if isinstance(pair, dict) else None) or ""
+            right = (pair.get("right") if isinstance(pair, dict) else None) or ""
+            if left or right:
+                match_left.append({"index": idx, "text": left})
+                match_right.append({"index": idx, "text": right})
+        random.shuffle(match_right)
+        if taa and getattr(taa, "answer_text", ""):
             try:
-                selected_answer_ids = [int(x) for x in raw_multi.split(",") if x.strip()]
+                match_selected = json.loads(getattr(taa, "answer_text", "") or "[]")
             except Exception:
-                selected_answer_ids = []
-        if not selected_answer_ids and selected_answer_id is not None:
-            selected_answer_ids = [selected_answer_id]
-        selected_answer_id = selected_answer_ids[0] if selected_answer_ids else None
-        text_answer = ""
+                match_selected = []
+        if not match_selected:
+            match_selected = [None] * len(match_left)
+    else:
+        if getattr(question, "answer_type", "text") in ("multi", "multiple"):
+            raw_multi = text_answer or ""
+            if raw_multi:
+                try:
+                    selected_answer_ids = [int(x) for x in raw_multi.split(",") if x.strip()]
+                except Exception:
+                    selected_answer_ids = []
+            if not selected_answer_ids and selected_answer_id is not None:
+                selected_answer_ids = [selected_answer_id]
+            selected_answer_id = selected_answer_ids[0] if selected_answer_ids else None
+            text_answer = ""
 
     # HTML-версии текста вопроса и вариантов с поддержкой ![](url)
     question_html = md_to_html(getattr(question, "text", None) or "")
@@ -398,6 +442,9 @@ async def run_test_get(
             "answer_text": text_answer,
             "state_json": "",
             "nav": nav,
+            "match_left": match_left,
+            "match_right": match_right,
+            "match_selected": match_selected,
         },
     )
 
@@ -443,6 +490,9 @@ async def run_test_post(
         except ValueError:
             continue
 
+    # match: список соответствий left_index -> right_index
+    match_choices: List[Optional[int]] = []
+
     test = _get_test_or_404(db, test_id)
     tqs: List[TestQuestion] = _get_questions_for_test(db, test)
     total = len(tqs)
@@ -467,6 +517,18 @@ async def run_test_post(
 
     answer_type = getattr(question, "answer_type", "text") or "text"
 
+    if answer_type == "match":
+        try:
+            pairs = json.loads(question.options or "[]")
+        except Exception:
+            pairs = []
+        for i in range(len(pairs)):
+            val = form.get(f"match_choice_{i}")
+            try:
+                match_choices.append(int(val)) if val not in (None, "") else match_choices.append(None)
+            except ValueError:
+                match_choices.append(None)
+
     # Сохраняем/обновляем Answer
     ans: Optional[Answer] = (
         db.query(Answer)
@@ -483,7 +545,10 @@ async def run_test_post(
             question_id=question.id,
         )
 
-    if answer_type in ("multi", "multiple"):
+    if answer_type == "match":
+        ans.answer_text = json.dumps(match_choices)
+        ans.selected_option_id = None
+    elif answer_type in ("multi", "multiple"):
         # храним выбранные индексы через запятую
         if multi_ids:
             ans.answer_text = ",".join(str(i) for i in sorted(set(multi_ids)))
