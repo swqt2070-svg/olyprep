@@ -859,10 +859,19 @@ async def question_new_submit(
         if not correct_text.strip():
             error = "Укажите правильный текстовый ответ."
     elif answer_type in ("single", "multi"):
-        if len(options) < 1:
+        # валидные индексы — только для реально заполненных опций
+        valid_indices = [i for i, v in enumerate(options) if v.strip()]
+        if not valid_indices:
             error = "Добавьте хотя бы один вариант ответа."
-        elif answer_type == "single" and correct_index == "":
-            error = "Отметьте правильный вариант."
+        elif answer_type == "single":
+            try:
+                idx_int = int(correct_index)
+            except ValueError:
+                idx_int = None
+            # если не выбрали или выбрали пустую/невалидную позицию — берём первую непустую
+            if idx_int is None or idx_int < 0 or idx_int >= len(options) or not options[idx_int].strip():
+                idx_int = valid_indices[0]
+            correct_index = str(idx_int)
         elif answer_type == "multi":
             try:
                 correct_multi = [int(x) for x in form.getlist("correct_multi")]
@@ -874,7 +883,7 @@ async def question_new_submit(
                     correct_multi = [int(correct_index)]
                 except ValueError:
                     correct_multi = []
-            correct_multi = [i for i in correct_multi if 0 <= i < len(options)]
+            correct_multi = [i for i in correct_multi if 0 <= i < len(options) and options[i].strip()]
             if not correct_multi:
                 error = "Отметьте хотя бы один правильный вариант."
     elif answer_type == "number":
@@ -1940,4 +1949,3 @@ async def submission_set_points(
     db.commit()
 
     return RedirectResponse(url=f"/ui/submissions/{submission_id}", status_code=303)
-
