@@ -113,7 +113,16 @@ def _build_category_choices(categories: List[Category], roots_only: bool = False
 
 
 def _get_root_category_choices(db: Session) -> List[dict]:
-    return _build_category_choices(_fetch_categories(db), roots_only=True)
+    roots = [c for c in _fetch_categories(db) if c.parent_id is None]
+    unique = []
+    seen = set()
+    for c in roots:
+        if c.id in seen:
+            continue
+        seen.add(c.id)
+        unique.append(c)
+    unique.sort(key=lambda x: (x.name or "").lower())
+    return [{"id": c.id, "label": c.name} for c in unique]
 
 
 def _category_label(obj: Question) -> str:
