@@ -67,7 +67,25 @@ def _fetch_categories(db: Session) -> List[Category]:
     )
 
 
+def _unique_categories(categories: List[Category]) -> List[Category]:
+    """Удаляем дубли (одинаковый путь/родитель) чтобы не засорять списки выбора."""
+    unique: list[Category] = []
+    seen: set[tuple[Optional[int], str]] = set()
+    for c in categories:
+        try:
+            label = (c.full_path or "").strip().lower()
+        except Exception:
+            label = (c.name or "").strip().lower()
+        key = (c.parent_id, label)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(c)
+    return unique
+
+
 def _build_category_tree(categories: List[Category]) -> List[dict]:
+    categories = _unique_categories(categories)
     by_parent: dict[Optional[int], list[Category]] = {}
     for c in categories:
         by_parent.setdefault(c.parent_id, []).append(c)
@@ -84,6 +102,7 @@ def _build_category_tree(categories: List[Category]) -> List[dict]:
 
 
 def _build_category_choices(categories: List[Category], roots_only: bool = False) -> List[dict]:
+    categories = _unique_categories(categories)
     by_parent: dict[Optional[int], list[Category]] = {}
     for c in categories:
         by_parent.setdefault(c.parent_id, []).append(c)
@@ -113,16 +132,9 @@ def _build_category_choices(categories: List[Category], roots_only: bool = False
 
 
 def _get_root_category_choices(db: Session) -> List[dict]:
-    roots = [c for c in _fetch_categories(db) if c.parent_id is None]
-    unique = []
-    seen = set()
-    for c in roots:
-        if c.id in seen:
-            continue
-        seen.add(c.id)
-        unique.append(c)
-    unique.sort(key=lambda x: (x.name or "").lower())
-    return [{"id": c.id, "label": c.name} for c in unique]
+    roots = [c for c in _unique_categories(_fetch_categories(db)) if c.parent_id is None]
+    roots.sort(key=lambda x: (x.name or "").lower())
+    return [{"id": c.id, "label": c.name} for c in roots]
 
 
 def _category_label(obj: Question) -> str:
@@ -2413,9 +2425,26 @@ async def random_test_submit(
     if grade_val and grade_val not in GRADE_CHOICES:
         grade_val = ""
 
+    # Подготовим набор id категорий: если есть дубли с тем же названием, берём все
+    categories_all = _fetch_categories(db)
+    label_map: dict[int, str] = {}
+    by_label: dict[str, list[int]] = {}
+    for c in categories_all:
+        label = (c.name or "").strip().lower()
+        label_map[c.id] = label
+        by_label.setdefault(label, []).append(c.id)
+
+    selected_category_ids: list[int] = []
+    for cid in selected_categories:
+        label = label_map.get(cid)
+        if label:
+            selected_category_ids.extend(by_label.get(label, [cid]))
+        else:
+            selected_category_ids.append(cid)
+
     query = db.query(Question)
-    if selected_categories:
-        query = query.filter(Question.category_id.in_(selected_categories))
+    if selected_category_ids:
+        query = query.filter(Question.category_id.in_(selected_category_ids))
     if grade_val:
         query = query.filter(Question.grade == grade_val)
 
