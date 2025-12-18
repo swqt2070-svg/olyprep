@@ -2170,6 +2170,89 @@ async def question_delete(
     )
 
 
+@router.post("/admin/users/update", response_class=HTMLResponse)
+async def admin_update_user(
+    request: Request,
+    user_id: int = Form(...),
+    email: str = Form(...),
+    full_name: str = Form(""),
+    role: str = Form(...),
+    new_password: str = Form(""),
+    active: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    error = None
+    allowed_roles = ("admin", "teacher", "student")
+    target = db.get(User, user_id)
+    if not target:
+        return RedirectResponse("/ui/admin/users", status_code=303)
+
+    email = email.strip()
+    full_name = full_name.strip()
+    role = role.strip()
+    make_active = active is not None
+
+    if not email:
+        error = "Почта обязательна."
+    elif role not in allowed_roles:
+        error = "Неверная роль."
+    else:
+        other = db.query(User).filter(User.email == email, User.id != target.id).first()
+        if other:
+            error = "Такая почта уже используется."
+
+    if not error and new_password:
+        if len(new_password) < 6:
+            error = "Пароль должен быть не короче 6 символов."
+
+    # защита от потери последнего админа
+    if not error:
+        admins_count = _active_admins_count(db)
+        # если переводим админа в другую роль или выключаем активность
+        if target.role == UserRole.ADMIN:
+            turning_off = (role != UserRole.ADMIN) or (not make_active)
+            if target.active and turning_off and admins_count <= 1:
+                error = "Нельзя отключить или понизить последнего активного админа."
+        if target.id == user.id and not make_active:
+            error = "Нельзя деактивировать самого себя."
+
+    if error:
+        users = db.query(User).order_by(User.id.asc()).all()
+        return templates.TemplateResponse(
+            "users_admin.html",
+            {
+                "request": request,
+                "user": user,
+                "users": users,
+                "error": error,
+                "success": None,
+            },
+            status_code=400,
+        )
+
+    target.email = email
+    target.full_name = full_name or None
+    target.role = role
+    target.active = make_active
+    if new_password:
+        target.password_hash = hash_password(new_password)
+    db.add(target)
+    db.commit()
+
+    users = db.query(User).order_by(User.id.asc()).all()
+    return templates.TemplateResponse(
+        "users_admin.html",
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "error": None,
+            "success": "Данные обновлены.",
+        },
+    )
+
+
 # ---------- TESTS UI ----------
 
 

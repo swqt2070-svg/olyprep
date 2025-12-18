@@ -18,41 +18,7 @@
         <div class="alert alert-success">{{ success }}</div>
     {% endif %}
 
-    <h2 style="font-size:1.0rem;">Смена роли по почте</h2>
-
-    <form method="post" action="/ui/admin/users/set-role" class="form" style="margin-top:0.6rem;">
-        <div class="field">
-            <label class="field-label">Почта пользователя <span>*</span></label>
-            <input type="text" name="email" placeholder="user@example.com" required>
-        </div>
-        <div class="field">
-            <label class="field-label">Новая роль <span>*</span></label>
-            <select name="role" required>
-                <option value="student">student (ученик)</option>
-                <option value="teacher">teacher (учитель)</option>
-                <option value="admin">admin (администратор)</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary" style="margin-top:0.4rem;">Применить</button>
-    </form>
-
-    <hr style="border:none; border-top:1px solid rgba(148,163,184,0.35); margin:1.1rem 0;">
-
     <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">Список пользователей</h2>
-    <div class="card card-dark mb-3" style="padding:12px;">
-        <h3 style="font-size:0.95rem; margin-bottom:0.3rem;">Сброс пароля</h3>
-        <form method="post" action="/ui/admin/users/reset-password" class="form">
-            <div class="field">
-                <label class="field-label">Почта пользователя</label>
-                <input type="text" name="email" required placeholder="user@example.com">
-            </div>
-            <div class="field">
-                <label class="field-label">Новый пароль</label>
-                <input type="password" name="new_password" required>
-            </div>
-            <button type="submit" class="btn btn-secondary btn-sm">Сбросить пароль</button>
-        </form>
-    </div>
 
     {% if users|length == 0 %}
         <p class="muted">Пользователей пока нет.</p>
@@ -65,7 +31,7 @@
                         <th>Почта</th>
                         <th>ФИО</th>
                         <th style="width:120px;">Роль</th>
-                        <th style="width:220px;">Статус / Действия</th>
+                        <th style="width:260px;">Статус / Действия</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -79,31 +45,62 @@
                                     {{ u.email }}
                                 {% endif %}
                             </td>
-                            <td>{{ u.full_name or '—' }}</td>
+                            <td>{{ u.full_name or '-' }}</td>
                             <td>
                                 <span class="badge{% if u.role == 'admin' %} badge-blue{% elif u.role == 'teacher' %} badge-green{% endif %}">
                                     {{ u.role }}
                                 </span>
                             </td>
                             <td>
-                                <div class="d-flex" style="gap:6px; flex-wrap:wrap;">
+                                <div class="d-flex" style="gap:6px; flex-wrap:wrap; align-items:center;">
                                     <span class="badge {% if u.active %}badge-green{% else %}badge-gray{% endif %}">
                                         {% if u.active %}Активен{% else %}Заморожен{% endif %}
                                     </span>
-                                    <form method="post" action="/ui/admin/users/toggle-active" style="display:inline-block;">
-                                        <input type="hidden" name="user_id" value="{{ u.id }}">
-                                        {% if u.active %}
-                                            <button class="btn btn-sm" type="submit">Заморозить</button>
-                                        {% else %}
-                                            <button class="btn btn-sm" type="submit">Разморозить</button>
-                                        {% endif %}
-                                    </form>
                                     {% if user.id != u.id %}
                                     <form method="post" action="/ui/admin/users/delete" style="display:inline-block;" onsubmit="return confirm('Удалить учётку #{{ u.id }}?');">
                                         <input type="hidden" name="user_id" value="{{ u.id }}">
                                         <button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button>
                                     </form>
                                     {% endif %}
+                                    <details class="user-edit">
+                                        <summary class="btn btn-sm">Редактировать</summary>
+                                        <div class="edit-card">
+                                            <form method="post" action="/ui/admin/users/update" class="form edit-form">
+                                                <input type="hidden" name="user_id" value="{{ u.id }}">
+                                                <div class="field">
+                                                    <label class="field-label">Почта (логин)</label>
+                                                    <input type="email" name="email" required value="{{ u.email }}">
+                                                </div>
+                                                <div class="field">
+                                                    <label class="field-label">ФИО</label>
+                                                    <input type="text" name="full_name" value="{{ u.full_name or '' }}">
+                                                </div>
+                                                <div class="field">
+                                                    <label class="field-label">Роль</label>
+                                                    <select name="role">
+                                                        <option value="student" {% if u.role=='student' %}selected{% endif %}>Ученик</option>
+                                                        <option value="teacher" {% if u.role=='teacher' %}selected{% endif %}>Учитель</option>
+                                                        <option value="admin" {% if u.role=='admin' %}selected{% endif %}>Админ</option>
+                                                    </select>
+                                                </div>
+                                                <div class="field">
+                                                    <label class="field-label">Новый пароль (опционально)</label>
+                                                    <input type="password" name="new_password" placeholder="Не менять — оставьте пустым">
+                                                </div>
+                                                <div class="field">
+                                                    <label class="field-label">Статус</label>
+                                                    <label style="display:flex; align-items:center; gap:6px;">
+                                                        <input type="checkbox" name="active" {% if u.active %}checked{% endif %}>
+                                                        Активен (снять галку — заморозить)
+                                                    </label>
+                                                </div>
+                                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                                    <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
+                                                    <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('details').open=false;">Закрыть</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </details>
                                 </div>
                             </td>
                         </tr>
@@ -113,4 +110,21 @@
         </section>
     {% endif %}
 </section>
+
+<style>
+.user-edit summary {
+    list-style: none;
+}
+.user-edit summary::-webkit-details-marker { display:none; }
+.user-edit .edit-card {
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(148,163,184,0.2);
+}
+.edit-form .field {
+    margin-bottom: 0.4rem;
+}
+</style>
 {% endblock %}
