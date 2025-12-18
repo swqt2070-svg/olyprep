@@ -100,6 +100,7 @@
                     <th>Тест</th>
                     <th style="width:120px;">Баллы</th>
                     <th style="width:160px;">Дата</th>
+                    <th style="width:120px;"></th>
                 </tr>
             </thead>
             <tbody>
@@ -109,6 +110,7 @@
                         <td>{{ r.test.title }}</td>
                         <td>{{ r.submission.score }} / {{ r.max_points }}</td>
                         <td>{% if r.submission.started_at %}{{ r.submission.started_at.strftime("%d.%m.%Y %H:%M") }}{% else %}—{% endif %}</td>
+                        <td><a class="btn btn-sm" href="/ui/submissions/{{ r.submission.id }}">Детали</a></td>
                     </tr>
                 {% endfor %}
             </tbody>
