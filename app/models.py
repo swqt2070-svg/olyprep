@@ -60,12 +60,14 @@ class User(Base):
 
     id: Mapped[int] = Column(Integer, primary_key=True, index=True)
     email: Mapped[str] = Column(String, unique=True, index=True, nullable=False)
+    full_name: Mapped[Optional[str]] = Column(String, nullable=True)
     password_hash: Mapped[str] = Column(String, nullable=False)
     role: Mapped[str] = Column(
         Enum(UserRole.ADMIN, UserRole.TEACHER, UserRole.STUDENT, name="user_roles"),
         nullable=False,
         default=UserRole.STUDENT,
     )
+    student_class: Mapped[Optional[str]] = Column(String, nullable=True, index=True)
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
 
     created_tests: Mapped[List["Test"]] = relationship(

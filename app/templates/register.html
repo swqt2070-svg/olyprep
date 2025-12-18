@@ -20,12 +20,20 @@
 
         <form method="post" action="/ui/register" class="form">
             <div class="field">
+                <label class="field-label">ФИО</label>
+                <input type="text" name="full_name" required value="{{ full_name | default('') }}">
+            </div>
+            <div class="field">
                 <label class="field-label">Почта</label>
                 <input type="text" name="email" required>
             </div>
             <div class="field">
                 <label class="field-label">Пароль</label>
                 <input type="password" name="password" required>
+            </div>
+            <div class="field">
+                <label class="field-label">Класс (только для учеников)</label>
+                <input type="text" name="student_class" value="{{ student_class | default('') }}" placeholder="Например, 9">
             </div>
             <div class="field">
                 <label class="field-label">Код приглашения</label>

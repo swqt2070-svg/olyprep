@@ -49,6 +49,7 @@ def _ensure_legacy_columns() -> None:
     - добавляем columns options / correct в questions, если их не было;
     - переносим correct_answer_text -> correct, если новое поле пустое.
     - добавляем category_id и таблицу categories для иерархии категорий.
+    - добавляем full_name и student_class в users.
     """
     with engine.begin() as conn:
         cols = {row[1] for row in conn.execute(text("PRAGMA table_info(questions)"))}
@@ -109,6 +110,13 @@ def _ensure_legacy_columns() -> None:
                 """
             )
         )
+
+        # users: новые поля
+        ucols = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
+        if "full_name" not in ucols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR"))
+        if "student_class" not in ucols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN student_class VARCHAR"))
 
 
 @contextmanager

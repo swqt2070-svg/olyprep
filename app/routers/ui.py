@@ -388,10 +388,14 @@ async def register_submit(
     email: str = Form(...),
     password: str = Form(...),
     invite_code: str = Form(""),
+    full_name: str = Form(""),
+    student_class: str = Form(""),
     db: Session = Depends(get_db),
 ):
     email = email.strip()
     invite_code = invite_code.strip()
+    full_name = full_name.strip()
+    student_class = student_class.strip()
 
     if db.query(User).filter(User.email == email).first():
         return templates.TemplateResponse(
@@ -401,6 +405,8 @@ async def register_submit(
                 "user": None,
                 "error": "Такая почта уже используется",
                 "success": None,
+                "full_name": full_name,
+                "student_class": student_class,
             },
             status_code=400,
         )
@@ -433,11 +439,46 @@ async def register_submit(
                     "user": None,
                     "error": "Неверный код приглашения.",
                     "success": None,
+                    "full_name": full_name,
+                    "student_class": student_class,
                 },
                 status_code=400,
             )
 
-    user = User(email=email, password_hash=hash_password(password), role=role)
+    if not full_name:
+        return templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "user": None,
+                "error": "Укажите ФИО.",
+                "success": None,
+                "full_name": full_name,
+                "student_class": student_class,
+            },
+            status_code=400,
+        )
+    if role == "student" and not student_class:
+        return templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "user": None,
+                "error": "Для ученика укажите класс.",
+                "success": None,
+                "full_name": full_name,
+                "student_class": student_class,
+            },
+            status_code=400,
+        )
+
+    user = User(
+        email=email,
+        password_hash=hash_password(password),
+        role=role,
+        full_name=full_name,
+        student_class=student_class if role == "student" else None,
+    )
     db.add(user)
     db.commit()
 
@@ -2483,7 +2524,7 @@ async def submission_detail(
     submission_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role("admin", "teacher")),
+    user: User = Depends(get_current_user),
 ):
     sub = db.get(Submission, submission_id)
     if not sub:
@@ -2493,6 +2534,9 @@ async def submission_detail(
     if not test:
         raise HTTPException(status_code=404, detail="test not found")
     student = db.get(User, sub.user_id) if hasattr(sub, "user_id") else None
+    can_edit = user.role in ("admin", "teacher")
+    if (not can_edit) and (student is None or student.id != user.id):
+        raise HTTPException(status_code=403, detail="forbidden")
 
     tqs: List[TestQuestion] = (
         db.query(TestQuestion)
@@ -2579,7 +2623,7 @@ async def submission_detail(
             "rows": rows,
             "total_score": total_score,
             "max_total": max_total,
-            "can_edit": True,
+            "can_edit": can_edit,
         },
     )
 
