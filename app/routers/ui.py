@@ -436,7 +436,7 @@ async def login_submit(
     if not user or not verify_password(password, user.password_hash):
         return templates.TemplateResponse(
             "login.html",
-            {"request": request, "user": None, "error": "Неверная почта или пароль"},
+            {"request": request, "user": None, "error": "Неверный логин или пароль"},
             status_code=400,
         )
     if not getattr(user, "active", True):
@@ -497,7 +497,7 @@ async def register_submit(
             {
                 "request": request,
                 "user": None,
-                "error": "Такая почта уже используется",
+                "error": "Такой логин уже используется",
                 "success": None,
                 "full_name": full_name,
             },
@@ -694,7 +694,7 @@ async def admin_set_role(
     else:
         target = db.query(User).filter(User.email == email).first()
         if not target:
-            error = "Пользователь с такой почтой не найден."
+            error = "Пользователь не найден."
         elif target.id == user.id and role != "admin":
             error = "Нельзя понизить роль собственного админ‑аккаунта."
         else:
@@ -2194,13 +2194,13 @@ async def admin_update_user(
     make_active = active is not None
 
     if not email:
-        error = "Почта обязательна."
+        error = "Логин обязателен."
     elif role not in allowed_roles:
         error = "Неверная роль."
     else:
         other = db.query(User).filter(User.email == email, User.id != target.id).first()
         if other:
-            error = "Такая почта уже используется."
+            error = "Такой логин уже используется."
 
     if not error and new_password:
         if len(new_password) < 6:
@@ -2467,7 +2467,7 @@ async def test_stats_export(
     stats = _collect_test_stats(db, test)
     output = io.StringIO()
     writer = csv.writer(output)
-    header = ["ФИО", "Почта", "Класс", "Баллы", "Максимум", "Процент"]
+    header = ["ФИО", "Логин", "Класс", "Баллы", "Максимум", "Процент"]
     for qs in stats["question_stats"]:
         header.append(f"Вопрос {qs['order']}")
     writer.writerow(header)

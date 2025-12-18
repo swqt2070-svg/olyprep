@@ -21,7 +21,7 @@
     <section class="card">
         <h2 style="font-size:1.1rem;">Профиль</h2>
         <p class="muted" style="margin-top:0.4rem;">
-            Почта: <strong>{{ user.email }}</strong><br>
+            Логин: <strong>{{ user.email }}</strong><br>
             Роль: <strong>{{ user.role }}</strong>
         </p>
 
@@ -128,7 +128,7 @@
             <input type="text"
                    name="search"
                    class="form-control"
-                   placeholder="Поиск по ФИО или почте"
+                   placeholder="Поиск по ФИО или логину"
                    value="{{ search | default('') }}"
                    style="max-width:240px;">
             <button class="btn btn-secondary btn-sm" type="submit">Поиск</button>

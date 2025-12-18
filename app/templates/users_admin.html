@@ -28,7 +28,7 @@
                 <thead>
                     <tr>
                         <th style="width:60px;">ID</th>
-                        <th>Почта</th>
+                        <th>Логин</th>
                         <th>ФИО</th>
                         <th style="width:120px;">Роль</th>
                         <th style="width:260px;">Статус / Действия</th>
@@ -68,7 +68,7 @@
                                             <form method="post" action="/ui/admin/users/update" class="form edit-form">
                                                 <input type="hidden" name="user_id" value="{{ u.id }}">
                                                 <div class="field">
-                                                    <label class="field-label">Почта (логин)</label>
+                                                    <label class="field-label">Логин / телефон</label>
                                                     <input type="email" name="email" required value="{{ u.email }}">
                                                 </div>
                                                 <div class="field">

@@ -14,9 +14,9 @@ def register(
     password: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    # если пользователь с таким email уже есть
+    # если пользователь с таким логином уже есть
     if db.query(User).filter(User.email == email).first():
-        raise HTTPException(400, "email exists")
+        raise HTTPException(400, "login exists")
 
     # если это самый первый пользователь в системе — делаем его admin
     total_users = db.query(User).count()
@@ -37,7 +37,7 @@ def login(
 ):
     user = db.query(User).filter(User.email == email).first()
     if not user or not verify_password(password, user.password_hash):
-        raise HTTPException(401, "Invalid email or password")
+        raise HTTPException(401, "Invalid login or password")
 
     token = create_token({"id": user.id, "role": user.role})
     response.set_cookie("access_token", token, httponly=True)
