@@ -50,6 +50,7 @@ def _ensure_legacy_columns() -> None:
     - переносим correct_answer_text -> correct, если новое поле пустое.
     - добавляем category_id и таблицу categories для иерархии категорий.
     - добавляем full_name и student_class в users.
+    - создаём таблицу registration_codes.
     """
     with engine.begin() as conn:
         cols = {row[1] for row in conn.execute(text("PRAGMA table_info(questions)"))}
@@ -117,6 +118,23 @@ def _ensure_legacy_columns() -> None:
             conn.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR"))
         if "student_class" not in ucols:
             conn.execute(text("ALTER TABLE users ADD COLUMN student_class VARCHAR"))
+
+        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
+        if "registration_codes" not in tables:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE registration_codes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        code VARCHAR NOT NULL UNIQUE,
+                        role VARCHAR NOT NULL,
+                        max_uses INTEGER NOT NULL DEFAULT 1,
+                        used INTEGER NOT NULL DEFAULT 0,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+            )
 
 
 @contextmanager

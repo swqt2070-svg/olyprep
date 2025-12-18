@@ -85,6 +85,21 @@ class AnswerType(str):
     NUMBER = "number"
     MATCH = "match"
 
+
+class RegistrationCode(Base):
+    __tablename__ = "registration_codes"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    code: Mapped[str] = Column(String, unique=True, nullable=False, index=True)
+    role: Mapped[str] = Column(
+        Enum(UserRole.ADMIN, UserRole.TEACHER, UserRole.STUDENT, name="user_roles"),
+        nullable=False,
+        default=UserRole.STUDENT,
+    )
+    max_uses: Mapped[int] = Column(Integer, nullable=False, default=1)
+    used: Mapped[int] = Column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
+
 class Question(Base):
     __tablename__ = "questions"
 
