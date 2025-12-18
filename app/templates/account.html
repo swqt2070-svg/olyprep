@@ -121,7 +121,18 @@
 
 {% if teacher_results %}
 <section class="card table-card" style="margin-top:1.5rem;">
-    <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">Результаты учеников</h2>
+    <div class="d-flex justify-content-between align-items-center" style="margin-bottom:0.4rem;">
+        <h2 style="font-size:1.0rem; margin-bottom:0;">Результаты учеников</h2>
+        <form method="get" action="/ui/account" class="d-flex" style="gap:8px;">
+            <input type="text"
+                   name="search"
+                   class="form-control"
+                   placeholder="Поиск по ФИО или почте"
+                   value="{{ search | default('') }}"
+                   style="max-width:240px;">
+            <button class="btn btn-secondary btn-sm" type="submit">Поиск</button>
+        </form>
+    </div>
     {% if teacher_results|length == 0 %}
         <p class="muted">Пока нет попыток учеников.</p>
     {% else %}
@@ -140,7 +151,7 @@
                 {% for r in teacher_results %}
                     <tr>
                         <td>{{ loop.index }}</td>
-                        <td>{{ r.student.email }}</td>
+                        <td>{{ r.display_name }}</td>
                         <td>{{ r.test.title }}</td>
                         <td>{{ r.submission.score }} / {{ r.max_points }}</td>
                         <td>{% if r.submission.started_at %}{{ r.submission.started_at.strftime("%d.%m.%Y %H:%M") }}{% else %}—{% endif %}</td>

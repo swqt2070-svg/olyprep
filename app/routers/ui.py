@@ -33,6 +33,7 @@ from app.models import (
     Answer,
     AnswerOption,
     Category,
+    RegistrationCode,
 )
 from app.security import hash_password, verify_password, create_token
 
@@ -161,6 +162,7 @@ def build_account_context(
     request: Request,
     db: Session,
     user: User,
+    search: str = "",
     password_error: Optional[str] = None,
     password_success: Optional[str] = None,
 ):
@@ -228,20 +230,30 @@ def build_account_context(
             if not student or not test:
                 continue
             max_points = max_points_map.get(test.id, 0)
+            display_name = getattr(student, "full_name", None) or student.email
             rows.append(
                 {
                     "submission": sub,
                     "student": student,
                     "test": test,
                     "max_points": max_points,
+                    "display_name": display_name,
                 }
             )
+        if search:
+            s = search.lower()
+            rows = [
+                r
+                for r in rows
+                if s in str(r["display_name"]).lower() or s in str(r["student"].email).lower()
+            ]
 
         teacher_results = rows
 
     return {
         "request": request,
         "user": user,
+        "search": search,
         "password_error": password_error,
         "password_success": password_success,
         "student_results": student_results,
@@ -412,6 +424,7 @@ async def register_submit(
         )
 
     has_admin = db.query(User).filter(User.role == "admin").first() is not None
+    code_rec: Optional[RegistrationCode] = None
 
     if not has_admin:
         role = "admin"
@@ -424,10 +437,32 @@ async def register_submit(
                     "user": None,
                     "error": "Для регистрации нужен код приглашения. Получите его у учителя или администратора.",
                     "success": None,
+                    "full_name": full_name,
+                    "student_class": student_class,
                 },
                 status_code=400,
             )
-        if invite_code == STUDENT_INVITE_CODE:
+        code_rec = (
+            db.query(RegistrationCode)
+            .filter(RegistrationCode.code == invite_code)
+            .first()
+        )
+        if code_rec:
+            if code_rec.used >= code_rec.max_uses:
+                return templates.TemplateResponse(
+                    "register.html",
+                    {
+                        "request": request,
+                        "user": None,
+                        "error": "Лимит регистраций по этому коду исчерпан.",
+                        "success": None,
+                        "full_name": full_name,
+                        "student_class": student_class,
+                    },
+                    status_code=400,
+                )
+            role = code_rec.role
+        elif invite_code == STUDENT_INVITE_CODE:
             role = "student"
         elif invite_code == TEACHER_INVITE_CODE:
             role = "teacher"
@@ -480,6 +515,9 @@ async def register_submit(
         student_class=student_class if role == "student" else None,
     )
     db.add(user)
+    if code_rec:
+        code_rec.used = (code_rec.used or 0) + 1
+        db.add(code_rec)
     db.commit()
 
     token = create_token({"id": user.id, "role": user.role})
@@ -512,7 +550,8 @@ async def account_page(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    ctx = build_account_context(request, db, user)
+    search = (request.query_params.get("search") or "").strip()
+    ctx = build_account_context(request, db, user, search=search)
     return templates.TemplateResponse("account.html", ctx)
 
 
