@@ -147,6 +147,43 @@ def _category_label(obj: Question) -> str:
     return getattr(obj, "category", None) or "Без категории"
 
 
+def _group_questions_for_view(
+    rows: List[Question], view_mode: str
+) -> dict:
+    """
+    Формирует структуру для разных режимов отображения:
+    - nested: категория -> класс -> год -> этап
+    - category: категория -> [вопросы]
+    - grade: класс -> [вопросы]
+    """
+    if view_mode == "category":
+        library: dict[str, list[Question]] = {}
+        for q in rows:
+            category = _category_label(q)
+            library.setdefault(category, []).append(q)
+        return library
+
+    if view_mode == "grade":
+        library: dict[str, list[Question]] = {}
+        for q in rows:
+            grade = str(q.grade) if q.grade else "—"
+            library.setdefault(grade, []).append(q)
+        return library
+
+    # nested (по умолчанию)
+    library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
+    for q in rows:
+        category = _category_label(q)
+        try:
+            grade = int(q.grade) if q.grade is not None else 0
+        except (TypeError, ValueError):
+            grade = 0
+        year = q.year or "?"
+        stage = q.stage or "?"
+        library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
+    return library
+
+
 # ---------- UPLOADS ----------
 
 
@@ -1280,28 +1317,19 @@ async def questions_list(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    # забираем все вопросы
-    rows: List[Question] = db.query(Question).all()
+    view_mode = request.query_params.get("view", "nested")
+    if view_mode not in ("nested", "category", "grade"):
+        view_mode = "nested"
 
-    # строим иерархию: Категория -> Класс -> Год -> Этап -> список вопросов
-    library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
-
-    for q in rows:
-        category = _category_label(q)
-        try:
-            grade = int(q.grade) if q.grade is not None else 0
-        except (TypeError, ValueError):
-            grade = 0
-        year = q.year or "?"
-        stage = q.stage or "?"
-
-        library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
+    rows: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
+    library = _group_questions_for_view(rows, view_mode)
     return templates.TemplateResponse(
         "questions_list.html",
         {
             "request": request,
             "user": user,
             "library": library,
+            "view_mode": view_mode,
             "error": None,
             "success": None,
         },
@@ -2124,13 +2152,18 @@ async def question_delete(
     db.delete(q)
     db.commit()
 
-    rows: List[Question] = db.query(Question).order_by(Question.id.desc()).all()
+    view_mode = request.query_params.get("view", "nested")
+    if view_mode not in ("nested", "category", "grade"):
+        view_mode = "nested"
+    rows: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
+    library = _group_questions_for_view(rows, view_mode)
     return templates.TemplateResponse(
         "questions_list.html",
         {
             "request": request,
             "user": user,
-            "questions": rows,
+            "library": library,
+            "view_mode": view_mode,
             "error": None,
             "success": f"Вопрос #{question_id} удалён.",
         },
@@ -2380,6 +2413,37 @@ async def test_stats_export(
     )
 
 
+def _build_test_library(questions: List[Question], view_mode: str):
+    """
+    Подготавливает структуру для конструктора тестов под выбранный режим отображения.
+    """
+    if view_mode == "category":
+        lib: dict[str, list[Question]] = {}
+        for q in questions:
+            lib.setdefault(_category_label(q), []).append(q)
+        return lib
+
+    if view_mode == "grade":
+        lib: dict[str, list[Question]] = {}
+        for q in questions:
+            grade = str(q.grade) if q.grade else "—"
+            lib.setdefault(grade, []).append(q)
+        return lib
+
+    # nested
+    lib: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
+    for q in questions:
+        category = _category_label(q)
+        try:
+            grade = int(q.grade) if q.grade is not None else 0
+        except (TypeError, ValueError):
+            grade = 0
+        year = q.year or ""
+        stage = q.stage or ""
+        lib.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
+    return lib
+
+
 @router.get("/tests/random", response_class=HTMLResponse)
 async def random_test_form(
     request: Request,
@@ -2501,17 +2565,11 @@ async def test_builder_new(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "teacher")),
 ):
+    view_mode = request.query_params.get("view", "nested")
+    if view_mode not in ("nested", "category", "grade"):
+        view_mode = "nested"
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
-    library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
-    for q in questions:
-        category = _category_label(q)
-        try:
-            grade = int(q.grade) if q.grade is not None else 0
-        except (TypeError, ValueError):
-            grade = 0
-        year = q.year or ""
-        stage = q.stage or ""
-        library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
+    library = _build_test_library(questions, view_mode)
     return templates.TemplateResponse(
         "test_builder.html",
         {
@@ -2522,6 +2580,7 @@ async def test_builder_new(
             "questions": questions,
             "library": library,
             "selected": {},
+            "view_mode": view_mode,
         },
     )
 
@@ -2533,6 +2592,9 @@ async def test_builder_new_post(
     user: User = Depends(require_role("admin", "teacher")),
 ):
     form = await request.form()
+    view_mode = form.get("view_mode") or "nested"
+    if view_mode not in ("nested", "category", "grade"):
+        view_mode = "nested"
     title = (form.get("title") or "").strip()
     description = (form.get("description") or "").strip()
     show_correct = "show_correct_answers" in form
@@ -2562,16 +2624,7 @@ async def test_builder_new_post(
         error = None
 
     if error:
-        library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
-        for q in questions:
-            category = _category_label(q)
-            try:
-                grade = int(q.grade) if q.grade is not None else 0
-            except (TypeError, ValueError):
-                grade = 0
-            year = q.year or ""
-            stage = q.stage or ""
-            library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
+        library = _build_test_library(questions, view_mode)
         return templates.TemplateResponse(
             "test_builder.html",
             {
@@ -2584,6 +2637,7 @@ async def test_builder_new_post(
                 "selected": {},
                 "max_attempts": max_attempts,
                 "error": error,
+                "view_mode": view_mode,
             },
             status_code=400,
         )
@@ -2620,21 +2674,15 @@ async def test_builder_edit(
     db: Session = Depends(get_db),
     user: User = Depends(require_role("admin", "teacher")),
 ):
+    view_mode = request.query_params.get("view", "nested")
+    if view_mode not in ("nested", "category", "grade"):
+        view_mode = "nested"
     test = db.get(Test, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="test not found")
 
     questions: List[Question] = db.query(Question).order_by(Question.id.asc()).all()
-    library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
-    for q in questions:
-        category = _category_label(q)
-        try:
-            grade = int(q.grade) if q.grade is not None else 0
-        except (TypeError, ValueError):
-            grade = 0
-        year = q.year or ""
-        stage = q.stage or ""
-        library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
+    library = _build_test_library(questions, view_mode)
     tqs: List[TestQuestion] = (
         db.query(TestQuestion)
         .filter(TestQuestion.test_id == test.id)
@@ -2652,6 +2700,7 @@ async def test_builder_edit(
             "questions": questions,
             "library": library,
             "selected": selected,
+            "view_mode": view_mode,
         },
     )
 
@@ -2668,6 +2717,9 @@ async def test_builder_edit_post(
         raise HTTPException(status_code=404, detail="test not found")
 
     form = await request.form()
+    view_mode = form.get("view_mode") or "nested"
+    if view_mode not in ("nested", "category", "grade"):
+        view_mode = "nested"
     title = (form.get("title") or "").strip()
     description = (form.get("description") or "").strip()
     show_correct = "show_correct_answers" in form
@@ -2703,16 +2755,7 @@ async def test_builder_edit_post(
             .all()
         )
         selected = {tq.question_id: tq for tq in tqs}
-        library: dict[str, dict[int, dict[str, dict[str, list[Question]]]]] = {}
-        for q in questions:
-            category = _category_label(q)
-            try:
-                grade = int(q.grade) if q.grade is not None else 0
-            except (TypeError, ValueError):
-                grade = 0
-            year = q.year or ""
-            stage = q.stage or ""
-            library.setdefault(category, {}).setdefault(grade, {}).setdefault(year, {}).setdefault(stage, []).append(q)
+        library = _build_test_library(questions, view_mode)
         return templates.TemplateResponse(
             "test_builder.html",
             {
@@ -2725,6 +2768,7 @@ async def test_builder_edit_post(
                 "selected": selected,
                 "max_attempts": max_attempts,
                 "error": error,
+                "view_mode": view_mode,
             },
             status_code=400,
         )

@@ -29,6 +29,7 @@
 {% endif %}
 
 <form method="post">
+    <input type="hidden" name="view_mode" value="{{ view_mode if view_mode is defined else 'nested' }}">
     {# Карточка с настройками теста #}
     <div class="card" style="margin-bottom:1.5rem;">
         <div class="card-body">
@@ -74,14 +75,18 @@
         </div>
     </div>
 
-    {# Блок выбора вопросов — дизайн как в библиотеке задач #}
+    {# Блок выбора вопросов - дизайн как в библиотеке задач #}
     <h2 class="page-title" style="font-size:1.25rem;">Выберите вопросы из библиотеки</h2>
-    <p class="page-subtitle">
-        Раскрывай уровни: <strong>Категория → Класс → Год → Этап</strong>, чтобы увидеть задачи.
-    </p>
+    <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center; margin-bottom:0.25rem;">
+        <div class="muted">Режим группировки:</div>
+        <select onchange="window.location='?view='+this.value;" class="field-input" style="padding:6px 10px; min-width:200px;">
+            <option value="nested" {% if view_mode=='nested' %}selected{% endif %}>Категория → Класс → Год → Этап</option>
+            <option value="category" {% if view_mode=='category' %}selected{% endif %}>По категории</option>
+            <option value="grade" {% if view_mode=='grade' %}selected{% endif %}>По классу</option>
+        </select>
+    </div>
     <p class="muted" style="margin-top:0.25rem;">
-        Отметьте чекбокс в колонке <strong>«В тест»</strong>, чтобы добавить задачу в тест.
-        По умолчанию за каждый вопрос начисляется 1 балл.
+        Отметьте чекбокс «В тест», чтобы добавить задачу. По умолчанию за каждый вопрос начисляется 1 балл.
     </p>
 
     {% if not library %}
@@ -89,94 +94,170 @@
     {% else %}
 
     <div class="library-tree" style="margin-top:1rem;">
-        {# Категория #}
-        {% for category, grades in library|dictsort %}
-        <details class="lib-level lib-category" {% if loop.first %}open{% endif %}>
-            <summary class="lib-summary">
-                <strong>Категория:</strong> {{ category }}
-            </summary>
-
-            {# Класс #}
-            {% for grade, years in grades|dictsort %}
-            <details class="lib-level lib-grade">
+        {% if view_mode == 'category' %}
+            {% for category, questions in library|dictsort %}
+            <details class="lib-level lib-category" {% if loop.first %}open{% endif %}>
+                <summary class="lib-summary"><strong>Категория:</strong> {{ category }}</summary>
+                <div class="table-card">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th style="width:70px;">В тест</th>
+                            <th style="width:60px;">ID</th>
+                            <th>Текст</th>
+                            <th style="width:90px;">Класс</th>
+                            <th style="width:90px;">Год</th>
+                            <th style="width:120px;">Этап</th>
+                            <th style="width:120px;">Тип</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for q in questions %}
+                            {% set tq = selected.get(q.id) if selected else None %}
+                            <tr>
+                                <td style="text-align:center;">
+                                    <input type="checkbox" name="q_{{ q.id }}_include" class="builder-checkbox" {% if tq %}checked{% endif %}>
+                                    <input type="hidden" name="q_{{ q.id }}_points" value="1">
+                                </td>
+                                <td>#{{ q.id }}</td>
+                                <td>{{ q.text | truncate(140, True, '…') }}</td>
+                                <td>{{ q.grade or '-' }}</td>
+                                <td>{{ q.year or '-' }}</td>
+                                <td>{{ q.stage or '-' }}</td>
+                                <td>{% if q.answer_type == "single" %}Выбрать один{% else %}Написать текст{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            {% endfor %}
+        {% elif view_mode == 'grade' %}
+            {% for grade, questions in library|dictsort %}
+            <details class="lib-level lib-grade" {% if loop.first %}open{% endif %}>
+                <summary class="lib-summary"><strong>Класс:</strong> {{ grade }}</summary>
+                <div class="table-card">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th style="width:70px;">В тест</th>
+                            <th style="width:60px;">ID</th>
+                            <th>Текст</th>
+                            <th style="width:180px;">Категория</th>
+                            <th style="width:90px;">Год</th>
+                            <th style="width:120px;">Этап</th>
+                            <th style="width:120px;">Тип</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for q in questions %}
+                            {% set tq = selected.get(q.id) if selected else None %}
+                            <tr>
+                                <td style="text-align:center;">
+                                    <input type="checkbox" name="q_{{ q.id }}_include" class="builder-checkbox" {% if tq %}checked{% endif %}>
+                                    <input type="hidden" name="q_{{ q.id }}_points" value="1">
+                                </td>
+                                <td>#{{ q.id }}</td>
+                                <td>{{ q.text | truncate(140, True, '…') }}</td>
+                                <td>{{ q.category or '-' }}</td>
+                                <td>{{ q.year or '-' }}</td>
+                                <td>{{ q.stage or '-' }}</td>
+                                <td>{% if q.answer_type == "single" %}Выбрать один{% else %}Написать текст{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+            {% endfor %}
+        {% else %}
+            {% for category, grades in library|dictsort %}
+            <details class="lib-level lib-category" {% if loop.first %}open{% endif %}>
                 <summary class="lib-summary">
-                    <strong>Класс:</strong>
-                    {% if grade == 0 %}&mdash;{% else %}{{ grade }}{% endif %}
+                    <strong>Категория:</strong> {{ category }}
                 </summary>
 
-                {# Год #}
-                {% for year_code, stages in years|dictsort %}
-                {% set code = year_code|string %}
-                {% if code and code|length == 4 %}
-                    {% set y1 = ('20' ~ code[0:2])|int %}
-                    {% set y2 = ('20' ~ code[2:4])|int %}
-                    {% set year_label = y1 ~ '–' ~ y2 %}
-                {% else %}
-                    {% set year_label = code %}
-                {% endif %}
-
-                <details class="lib-level lib-year">
+                {% for grade, years in grades|dictsort %}
+                <details class="lib-level lib-grade">
                     <summary class="lib-summary">
-                        <strong>Год:</strong> {{ year_label or '—' }}
+                        <strong>Класс:</strong>
+                        {% if grade == 0 %}&mdash;{% else %}{{ grade }}{% endif %}
                     </summary>
 
-                    {# Этап #}
-                    {% for stage, questions in stages|dictsort %}
-                    <details class="lib-level lib-stage">
+                    {% for year_code, stages in years|dictsort %}
+                    {% set code = year_code|string %}
+                    {% if code and code|length == 4 %}
+                        {% set y1 = ('20' ~ code[0:2])|int %}
+                        {% set y2 = ('20' ~ code[2:4])|int %}
+                        {% set year_label = y1 ~ '-' ~ y2 %}
+                    {% else %}
+                        {% set year_label = code %}
+                    {% endif %}
+
+                    <details class="lib-level lib-year">
                         <summary class="lib-summary">
-                            <strong>Этап:</strong> {{ stage or '—' }}
+                            <strong>Год:</strong> {{ year_label or '-' }}
                         </summary>
 
-                        <div class="table-card">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="width:70px;">В тест</th>
-                                        <th style="width:60px;">ID</th>
-                                        <th>Задача</th>
-                                        <th style="width:150px;">Тип</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for q in questions %}
-                                    {% set tq = selected.get(q.id) if selected else None %}
-                                    <tr>
-                                        <td style="text-align:center;">
-                                            <input type="checkbox"
-                                                   name="q_{{ q.id }}_include"
-                                                   class="builder-checkbox"
-                                                   {% if tq %}checked{% endif %}>
-                                            <input type="hidden"
-                                                   name="q_{{ q.id }}_points"
-                                                   value="1">
-                                        </td>
-                                        <td>#{{ q.id }}</td>
-                                        <td>
-                                            <div style="display:flex; align-items:flex-start; gap:0.5rem;">
-                                                {% if q.image_path %}
-                                                <div class="question-thumb-wrapper">
-                                                    <img src="{{ q.image_path }}"
-                                                         alt="Изображение задачи"
-                                                         class="question-thumb">
+                        {% for stage, questions in stages|dictsort %}
+                        <details class="lib-level lib-stage">
+                            <summary class="lib-summary">
+                                <strong>Этап:</strong> {{ stage or '-' }}
+                            </summary>
+
+                            <div class="table-card">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th style="width:70px;">В тест</th>
+                                            <th style="width:60px;">ID</th>
+                                            <th>Задача</th>
+                                            <th style="width:150px;">Тип</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for q in questions %}
+                                        {% set tq = selected.get(q.id) if selected else None %}
+                                        <tr>
+                                            <td style="text-align:center;">
+                                                <input type="checkbox"
+                                                       name="q_{{ q.id }}_include"
+                                                       class="builder-checkbox"
+                                                       {% if tq %}checked{% endif %}>
+                                                <input type="hidden"
+                                                       name="q_{{ q.id }}_points"
+                                                       value="1">
+                                            </td>
+                                            <td>#{{ q.id }}</td>
+                                            <td>
+                                                <div style="display:flex; align-items:flex-start; gap:0.5rem;">
+                                                    {% if q.image_path %}
+                                                    <div class="question-thumb-wrapper">
+                                                        <img src="{{ q.image_path }}"
+                                                             alt="Изображение задачи"
+                                                             class="question-thumb">
+                                                        </div>
+                                                    {% endif %}
+                                                    <div class="question-text">
+                                                        {{ q.text | truncate(180, True, '…') }}
+                                                    </div>
                                                 </div>
+                                            </td>
+                                            <td>
+                                                {% if q.answer_type == "single" %}
+                                                    Выбрать один
+                                                {% else %}
+                                                    Написать текст
                                                 {% endif %}
-                                                <div class="question-text">
-                                                    {{ q.text | truncate(180, True, '…') }}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            {% if q.answer_type == "single" %}
-                                                Выбрать один
-                                            {% else %}
-                                                Написать текст
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                        </details>
+                        {% endfor %}
 
                     </details>
                     {% endfor %}
@@ -186,9 +267,7 @@
 
             </details>
             {% endfor %}
-
-        </details>
-        {% endfor %}
+        {% endif %}
     </div>
     {% endif %}
 
@@ -200,7 +279,7 @@
     </div>
 </form>
 
-{# СТИЛИ — КАК ВО ВТОРОМ ФАЙЛЕ, ПЛЮС ЧЕКБОКСЫ #}
+{# стили #}
 <style>
     .lib-level {
         margin-bottom: 0.5rem;
@@ -217,7 +296,7 @@
         display: none;
     }
     .lib-summary::before {
-        content: "▸";
+        content: "›";
         display: inline-block;
         margin-right: 0.4rem;
         transition: transform 0.15s ease-out;
