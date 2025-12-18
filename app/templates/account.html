@@ -63,6 +63,7 @@
                 <a class="btn" href="/ui/import">Импорт .md/.zip</a>
                 {% if user.role == 'admin' %}
                     <a class="btn" href="/ui/admin/users">Админка ролей</a>
+                    <a class="btn btn-secondary" href="/ui/admin/users/import">Импорт пользователей</a>
                 {% endif %}
             {% else %}
                 <a class="btn btn-primary" href="/ui/tests">Перейти к тестам</a>

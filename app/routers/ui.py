@@ -22,6 +22,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 import os
+import csv
 
 from app.deps import get_db, get_current_user, require_role, require_teacher_or_admin
 from app.models import (
@@ -418,7 +419,6 @@ async def register_submit(
                 "error": "Такая почта уже используется",
                 "success": None,
                 "full_name": full_name,
-                "student_class": student_class,
             },
             status_code=400,
         )
@@ -438,7 +438,6 @@ async def register_submit(
                     "error": "Для регистрации нужен код приглашения. Получите его у учителя или администратора.",
                     "success": None,
                     "full_name": full_name,
-                    "student_class": student_class,
                 },
                 status_code=400,
             )
@@ -452,15 +451,14 @@ async def register_submit(
                 return templates.TemplateResponse(
                     "register.html",
                     {
-                        "request": request,
-                        "user": None,
-                        "error": "Лимит регистраций по этому коду исчерпан.",
-                        "success": None,
-                        "full_name": full_name,
-                        "student_class": student_class,
-                    },
-                    status_code=400,
-                )
+                    "request": request,
+                    "user": None,
+                    "error": "Лимит регистраций по этому коду исчерпан.",
+                    "success": None,
+                    "full_name": full_name,
+                },
+                status_code=400,
+            )
             role = code_rec.role
         elif invite_code == STUDENT_INVITE_CODE:
             role = "student"
@@ -475,7 +473,6 @@ async def register_submit(
                     "error": "Неверный код приглашения.",
                     "success": None,
                     "full_name": full_name,
-                    "student_class": student_class,
                 },
                 status_code=400,
             )
@@ -489,20 +486,6 @@ async def register_submit(
                 "error": "Укажите ФИО.",
                 "success": None,
                 "full_name": full_name,
-                "student_class": student_class,
-            },
-            status_code=400,
-        )
-    if role == "student" and not student_class:
-        return templates.TemplateResponse(
-            "register.html",
-            {
-                "request": request,
-                "user": None,
-                "error": "Для ученика укажите класс.",
-                "success": None,
-                "full_name": full_name,
-                "student_class": student_class,
             },
             status_code=400,
         )
@@ -512,7 +495,7 @@ async def register_submit(
         password_hash=hash_password(password),
         role=role,
         full_name=full_name,
-        student_class=student_class if role == "student" else None,
+        student_class=None,
     )
     db.add(user)
     if code_rec:
@@ -652,6 +635,117 @@ async def admin_set_role(
             "success": success,
         },
         status_code=status_code,
+    )
+
+
+# ---------- ADMIN: импорт пользователей из Excel/CSV ----------
+
+def _role_from_number(num: str) -> Optional[str]:
+    mapping = {"1": "student", "2": "teacher", "3": "admin"}
+    return mapping.get(str(num).strip())
+
+
+@router.get("/admin/users/import", response_class=HTMLResponse)
+async def admin_import_users_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    return templates.TemplateResponse(
+        "invite_codes.html",
+        {
+            "request": request,
+            "user": user,
+            "error": None,
+            "success": None,
+            "summary": None,
+        },
+    )
+
+
+@router.post("/admin/users/import", response_class=HTMLResponse)
+async def admin_import_users_submit(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    filename = file.filename or ""
+    data = await file.read()
+    rows: list[list[str]] = []
+    error: Optional[str] = None
+
+    if not filename:
+        error = "Файл не выбран."
+    else:
+        suffix = filename.lower().split(".")[-1]
+        if suffix == "csv":
+            try:
+                text = data.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = data.decode("cp1251", errors="ignore")
+            reader = csv.reader(text.splitlines())
+            rows = [list(row) for row in reader]
+        elif suffix in ("xlsx", "xlsm", "xltx", "xltm"):
+            try:
+                from openpyxl import load_workbook  # type: ignore
+            except ImportError:
+                error = "Для импорта .xlsx установите пакет openpyxl."
+            if not error:
+                wb = load_workbook(io.BytesIO(data), read_only=True)
+                ws = wb.active
+                for row in ws.iter_rows(values_only=True):
+                    rows.append([cell if cell is not None else "" for cell in row])
+        else:
+            error = "Поддерживаются файлы .csv или .xlsx"
+
+    created = 0
+    skipped = 0
+    errors: list[str] = []
+
+    if not error and rows:
+        if rows and rows[0]:
+            header = "".join(str(x or "").lower() for x in rows[0])
+            if "роль" in header and "лог" in header:
+                rows = rows[1:]
+
+        for row in rows:
+            if len(row) < 4:
+                skipped += 1
+                continue
+            role_raw, fio, login, pwd = [str(x or "").strip() for x in row[:4]]
+            role_str = _role_from_number(role_raw)
+            if not role_str or not login or not pwd:
+                skipped += 1
+                continue
+            if db.query(User).filter(User.email == login).first():
+                skipped += 1
+                continue
+            u = User(
+                email=login,
+                full_name=fio or None,
+                role=role_str,
+                password_hash=hash_password(pwd),
+            )
+            db.add(u)
+            created += 1
+        db.commit()
+
+    if error:
+        summary = None
+    else:
+        summary = {"created": created, "skipped": skipped, "errors": errors}
+
+    return templates.TemplateResponse(
+        "invite_codes.html",
+        {
+            "request": request,
+            "user": user,
+            "error": error,
+            "success": None if error else "Импорт завершён",
+            "summary": summary,
+        },
+        status_code=400 if error else 200,
     )
 
 
@@ -1902,7 +1996,6 @@ async def tests_list(
     role = user.role if user else None
     query = db.query(Test)
     if role not in ("teacher", "admin"):
-        # скрываем автогенерированные случайные тесты для студентов
         query = query.filter(
             or_(
                 Test.description.is_(None),
@@ -1910,23 +2003,49 @@ async def tests_list(
             )
         )
     tests = query.order_by(Test.id.desc()).all()
-    info = []
-    for t in tests:
-        tqs: List[TestQuestion] = (
-            db.query(TestQuestion)
-            .filter(TestQuestion.test_id == t.id)
-            .all()
-        )
-        info.append(
-            {
-                "test": t,
-                "question_count": len(tqs),
-                "max_score": sum(tq.points for tq in tqs) if tqs else 0,
-            }
-        )
+
+    def build_info(test_list: List[Test]) -> List[dict]:
+        out = []
+        for t in test_list:
+            tqs: List[TestQuestion] = (
+                db.query(TestQuestion)
+                .filter(TestQuestion.test_id == t.id)
+                .all()
+            )
+            out.append(
+                {
+                    "test": t,
+                    "question_count": len(tqs),
+                    "max_score": sum(tq.points for tq in tqs) if tqs else 0,
+                }
+            )
+        return out
+
+    submissions = (
+        db.query(Submission)
+        .filter(Submission.user_id == user.id)
+        .all()
+        if user
+        else []
+    )
+    passed_ids = {s.test_id for s in submissions if s.test_id}
+    passed_tests = [t for t in tests if t.id in passed_ids]
+
+    if role in ("teacher", "admin"):
+        new_tests = tests
+    else:
+        new_tests = [t for t in tests if (t.id not in passed_ids) and ((t.created_by and t.created_by.role == "admin") or t.created_by_id is None)]
+
+    context = {
+        "request": request,
+        "user": user,
+        "role": role,
+        "new_tests": build_info(new_tests),
+        "passed_tests": build_info(passed_tests),
+    }
     return templates.TemplateResponse(
         "tests_list.html",
-        {"request": request, "user": user, "tests": tests, "test_info": info, "role": role},
+        context,
     )
 
 

@@ -13,7 +13,8 @@
         <a href="/ui/tests/random" class="btn btn-secondary">Случайный тест</a>
     </div>
 
-    {% if test_info %}
+    <h2 class="mt-3">Новые</h2>
+    {% if new_tests and new_tests|length > 0 %}
         <div class="card">
             <table class="table">
                 <thead>
@@ -26,7 +27,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                {% for item in test_info %}
+                {% for item in new_tests %}
                     {% set t = item.test %}
                     <tr>
                         <td>{{ t.title }}</td>
@@ -37,9 +38,7 @@
                             {% if role in ["teacher", "admin"] %}
                                 <a href="/ui/tests/{{ t.id }}/edit" class="btn btn-sm">Редактировать</a>
                             {% endif %}
-                            <a href="/ui/tests/run/{{ t.id }}" class="btn btn-sm btn-primary">
-                                Пройти
-                            </a>
+                            <a href="/ui/tests/run/{{ t.id }}" class="btn btn-sm btn-primary">Пройти</a>
                         </td>
                     </tr>
                 {% endfor %}
@@ -47,7 +46,43 @@
             </table>
         </div>
     {% else %}
-        <p>Тестов пока нет.</p>
+        <p class="text-muted">Нет новых тестов.</p>
+    {% endif %}
+
+    <h2 class="mt-4">Пройденные</h2>
+    {% if passed_tests and passed_tests|length > 0 %}
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Название</th>
+                        <th>Вопросов</th>
+                        <th>Макс. балл</th>
+                        <th>Создан</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for item in passed_tests %}
+                    {% set t = item.test %}
+                    <tr>
+                        <td>{{ t.title }}</td>
+                        <td>{{ item.question_count }}</td>
+                        <td>{{ item.max_score }}</td>
+                        <td>{{ t.created_at.strftime("%d.%m.%Y %H:%M") if t.created_at else "" }}</td>
+                        <td class="table-actions">
+                            {% if role in ["teacher", "admin"] %}
+                                <a href="/ui/tests/{{ t.id }}/edit" class="btn btn-sm">Редактировать</a>
+                            {% endif %}
+                            <a href="/ui/tests/run/{{ t.id }}" class="btn btn-sm btn-primary">Пройти</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="text-muted">Нет пройденных тестов.</p>
     {% endif %}
 </div>
 {% endblock %}
