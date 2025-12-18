@@ -49,7 +49,9 @@
                     <tr>
                         <th style="width:60px;">ID</th>
                         <th>Почта</th>
+                        <th>ФИО</th>
                         <th style="width:120px;">Роль</th>
+                        <th style="width:220px;">Статус / Действия</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -63,10 +65,32 @@
                                     {{ u.email }}
                                 {% endif %}
                             </td>
+                            <td>{{ u.full_name or '—' }}</td>
                             <td>
                                 <span class="badge{% if u.role == 'admin' %} badge-blue{% elif u.role == 'teacher' %} badge-green{% endif %}">
                                     {{ u.role }}
                                 </span>
+                            </td>
+                            <td>
+                                <div class="d-flex" style="gap:6px; flex-wrap:wrap;">
+                                    <span class="badge {% if u.active %}badge-green{% else %}badge-gray{% endif %}">
+                                        {% if u.active %}Активен{% else %}Заморожен{% endif %}
+                                    </span>
+                                    <form method="post" action="/ui/admin/users/toggle-active" style="display:inline-block;">
+                                        <input type="hidden" name="user_id" value="{{ u.id }}">
+                                        {% if u.active %}
+                                            <button class="btn btn-sm" type="submit">Заморозить</button>
+                                        {% else %}
+                                            <button class="btn btn-sm" type="submit">Разморозить</button>
+                                        {% endif %}
+                                    </form>
+                                    {% if user.id != u.id %}
+                                    <form method="post" action="/ui/admin/users/delete" style="display:inline-block;" onsubmit="return confirm('Удалить учётку #{{ u.id }}?');">
+                                        <input type="hidden" name="user_id" value="{{ u.id }}">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button>
+                                    </form>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                     {% endfor %}

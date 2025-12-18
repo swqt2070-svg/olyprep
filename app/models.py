@@ -68,6 +68,7 @@ class User(Base):
         default=UserRole.STUDENT,
     )
     student_class: Mapped[Optional[str]] = Column(String, nullable=True, index=True)
+    active: Mapped[bool] = Column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
 
     created_tests: Mapped[List["Test"]] = relationship(

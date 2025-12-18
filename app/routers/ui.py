@@ -380,6 +380,12 @@ async def login_submit(
             {"request": request, "user": None, "error": "Неверная почта или пароль"},
             status_code=400,
         )
+    if not getattr(user, "active", True):
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "user": None, "error": "Учётная запись заморожена. Обратитесь к администратору."},
+            status_code=403,
+        )
 
     token = create_token({"id": user.id, "role": user.role})
     response = redirect("/ui/dashboard")
@@ -676,6 +682,79 @@ async def admin_import_users_page(
             "success": None,
             "summary": None,
         },
+    )
+
+
+def _active_admins_count(db: Session) -> int:
+    return (
+        db.query(User)
+        .filter(User.role == UserRole.ADMIN, User.active.is_(True))
+        .count()
+    )
+
+
+@router.post("/admin/users/toggle-active", response_class=HTMLResponse)
+async def admin_toggle_active(
+    request: Request,
+    user_id: int = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    target = db.get(User, user_id)
+    if not target:
+        return RedirectResponse("/ui/admin/users", status_code=303)
+    if target.id == user.id:
+        error = "Нельзя заморозить/разморозить самого себя."
+    elif target.role == UserRole.ADMIN and target.active and _active_admins_count(db) <= 1:
+        error = "Нельзя заморозить последнего активного админа."
+    else:
+        target.active = not bool(getattr(target, "active", True))
+        db.add(target)
+        db.commit()
+        error = None
+    users = db.query(User).order_by(User.id.asc()).all()
+    return templates.TemplateResponse(
+        "users_admin.html",
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "error": error,
+            "success": None if error else "Статус учётной записи обновлён.",
+        },
+        status_code=400 if error else 200,
+    )
+
+
+@router.post("/admin/users/delete", response_class=HTMLResponse)
+async def admin_delete_user(
+    request: Request,
+    user_id: int = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    target = db.get(User, user_id)
+    if not target:
+        return RedirectResponse("/ui/admin/users", status_code=303)
+    if target.id == user.id:
+        error = "Нельзя удалить самого себя."
+    elif target.role == UserRole.ADMIN and _active_admins_count(db) <= 1:
+        error = "Нельзя удалить последнего админа."
+    else:
+        db.delete(target)
+        db.commit()
+        error = None
+    users = db.query(User).order_by(User.id.asc()).all()
+    return templates.TemplateResponse(
+        "users_admin.html",
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "error": error,
+            "success": None if error else "Учётная запись удалена.",
+        },
+        status_code=400 if error else 200,
     )
 
 

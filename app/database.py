@@ -51,6 +51,7 @@ def _ensure_legacy_columns() -> None:
     - добавляем category_id и таблицу categories для иерархии категорий.
     - добавляем full_name и student_class в users.
     - создаём таблицу registration_codes.
+    - добавляем поле active в users.
     """
     with engine.begin() as conn:
         cols = {row[1] for row in conn.execute(text("PRAGMA table_info(questions)"))}
@@ -118,6 +119,8 @@ def _ensure_legacy_columns() -> None:
             conn.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR"))
         if "student_class" not in ucols:
             conn.execute(text("ALTER TABLE users ADD COLUMN student_class VARCHAR"))
+        if "active" not in ucols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN active BOOLEAN DEFAULT 1"))
 
         tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))}
         if "registration_codes" not in tables:
