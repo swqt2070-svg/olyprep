@@ -133,7 +133,7 @@
 
 <div class="library-tree mt-3">
     {% for category, grades in library|dictsort %}
-    <details class="lib-level lib-category" {% if loop.first %}open{% endif %}>
+    <details class="lib-level lib-category">
         <summary class="lib-summary">
             <strong>Категория:</strong> {{ category }}
         </summary>

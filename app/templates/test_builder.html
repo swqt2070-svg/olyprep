@@ -96,7 +96,7 @@
     <div class="library-tree" style="margin-top:1rem;">
         {% if view_mode == 'category' %}
             {% for category, questions in library|dictsort %}
-            <details class="lib-level lib-category" {% if loop.first %}open{% endif %}>
+            <details class="lib-level lib-category">
                 <summary class="lib-summary"><strong>Категория:</strong> {{ category }}</summary>
                 <div class="table-card">
                     <table>
@@ -134,7 +134,7 @@
             {% endfor %}
         {% elif view_mode == 'grade' %}
             {% for grade, questions in library|dictsort %}
-            <details class="lib-level lib-grade" {% if loop.first %}open{% endif %}>
+            <details class="lib-level lib-grade">
                 <summary class="lib-summary"><strong>Класс:</strong> {{ grade }}</summary>
                 <div class="table-card">
                     <table>
@@ -172,7 +172,7 @@
             {% endfor %}
         {% else %}
             {% for category, grades in library|dictsort %}
-            <details class="lib-level lib-category" {% if loop.first %}open{% endif %}>
+            <details class="lib-level lib-category">
                 <summary class="lib-summary">
                     <strong>Категория:</strong> {{ category }}
                 </summary>
