@@ -591,7 +591,7 @@ async def run_test_post(
         attempt.finished_at = datetime.utcnow()
         db.add(attempt)
         db.commit()
-        return RedirectResponse(url="/ui/account", status_code=303)
+        return RedirectResponse(url=f"/ui/submissions/{attempt.id}", status_code=303)
 
     db.commit()
 
