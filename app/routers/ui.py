@@ -35,6 +35,7 @@ from app.models import (
     AnswerOption,
     Category,
     RegistrationCode,
+    UserRole,
 )
 from app.security import hash_password, verify_password, create_token
 
