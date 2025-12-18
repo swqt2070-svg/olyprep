@@ -28,7 +28,7 @@
                         <th>#</th>
                         <th>Задача</th>
                         <th>Ваш ответ</th>
-                        <th>Правильный ответ</th>
+                    <th>Правильный ответ{% if not show_correct|default(true) %} (скрыто){% endif %}</th>
                         <th>Баллы</th>
                         {% if can_edit %}<th style="width: 160px;">Правка</th>{% endif %}
                     </tr>
@@ -41,7 +41,13 @@
                                 {{ row.question.text | replace('\n', '<br>') | safe }}
                             </td>
                             <td class="col-answer">{{ row.your_answer }}</td>
-                            <td class="col-answer">{{ row.correct_answer }}</td>
+                                <td class="col-answer">
+                                    {% if show_correct|default(true) %}
+                                        {{ row.correct_answer }}
+                                    {% else %}
+                                        Скрыто
+                                    {% endif %}
+                                </td>
                             <td>{{ row.score }} / {{ row.max_points }}</td>
                             {% if can_edit %}
                             <td>

@@ -2502,6 +2502,7 @@ async def test_submit(
                 "rows": rows,
                 "total_score": score,
                 "max_total": max_points,
+                "show_correct": True,
             },
         )
 
@@ -2537,6 +2538,7 @@ async def submission_detail(
     can_edit = user.role in ("admin", "teacher")
     if (not can_edit) and (student is None or student.id != user.id):
         raise HTTPException(status_code=403, detail="forbidden")
+    show_correct = can_edit or bool(getattr(test, "show_answers_to_student", True))
 
     tqs: List[TestQuestion] = (
         db.query(TestQuestion)
@@ -2604,7 +2606,7 @@ async def submission_detail(
                 "index": idx,
                 "question": q,
                 "your_answer": your_answer,
-                "correct_answer": correct_answer,
+                "correct_answer": correct_answer if show_correct else "—",
                 "score": display_points or 0,
                 "max_points": getattr(link, "points", 0) or 0,
                 "question_id": q.id,
@@ -2624,6 +2626,7 @@ async def submission_detail(
             "total_score": total_score,
             "max_total": max_total,
             "can_edit": can_edit,
+            "show_correct": show_correct,
         },
     )
 
