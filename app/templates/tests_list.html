@@ -36,9 +36,15 @@
                         <td>{{ t.created_at.strftime("%d.%m.%Y %H:%M") if t.created_at else "" }}</td>
                         <td class="table-actions">
                             {% if role in ["teacher", "admin"] %}
-                                <a href="/ui/tests/{{ t.id }}/edit" class="btn btn-sm">Редактировать</a>
+                            <a href="/ui/tests/{{ t.id }}/edit" class="btn btn-sm">Редактировать</a>
+                            <a href="/ui/tests/{{ t.id }}/stats" class="btn btn-sm btn-outline">Статистика</a>
                             {% endif %}
                             <a href="/ui/tests/run/{{ t.id }}" class="btn btn-sm btn-primary">Пройти</a>
+                            {% if role in ["teacher", "admin"] %}
+                            <form method="post" action="/ui/tests/{{ t.id }}/delete" style="display:inline-block;" onsubmit="return confirm('Удалить тест \"{{ t.title }}\"? Все попытки будут удалены.');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                            </form>
+                            {% endif %}
                         </td>
                     </tr>
                 {% endfor %}
@@ -72,9 +78,15 @@
                         <td>{{ t.created_at.strftime("%d.%m.%Y %H:%M") if t.created_at else "" }}</td>
                         <td class="table-actions">
                             {% if role in ["teacher", "admin"] %}
-                                <a href="/ui/tests/{{ t.id }}/edit" class="btn btn-sm">Редактировать</a>
+                            <a href="/ui/tests/{{ t.id }}/edit" class="btn btn-sm">Редактировать</a>
+                            <a href="/ui/tests/{{ t.id }}/stats" class="btn btn-sm btn-outline">Статистика</a>
                             {% endif %}
                             <a href="/ui/tests/run/{{ t.id }}" class="btn btn-sm btn-primary">Пройти</a>
+                            {% if role in ["teacher", "admin"] %}
+                            <form method="post" action="/ui/tests/{{ t.id }}/delete" style="display:inline-block;" onsubmit="return confirm('Удалить тест \"{{ t.title }}\"? Все попытки будут удалены.');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                            </form>
+                            {% endif %}
                         </td>
                     </tr>
                 {% endfor %}

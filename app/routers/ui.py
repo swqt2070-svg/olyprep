@@ -8,7 +8,7 @@
     UploadFile,
     File,
 )
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -658,6 +658,42 @@ async def admin_set_role(
             "success": success,
         },
         status_code=status_code,
+    )
+
+@router.post("/admin/users/reset-password", response_class=HTMLResponse)
+async def admin_reset_password(
+    request: Request,
+    email: str = Form(...),
+    new_password: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    email = email.strip()
+    new_password = new_password.strip()
+    error = None
+    success = None
+    target = db.query(User).filter(User.email == email).first()
+    if not target:
+        error = "Пользователь не найден."
+    elif len(new_password) < 6:
+        error = "Новый пароль должен быть не короче 6 символов."
+    else:
+        target.password_hash = hash_password(new_password)
+        db.add(target)
+        db.commit()
+        success = f"Пароль для {email} обновлён."
+
+    users = db.query(User).order_by(User.id.asc()).all()
+    return templates.TemplateResponse(
+        "users_admin.html",
+        {
+            "request": request,
+            "user": user,
+            "users": users,
+            "error": error,
+            "success": success,
+        },
+        status_code=400 if error else 200,
     )
 
 
@@ -2145,6 +2181,184 @@ async def tests_list(
     )
 
 
+def _collect_test_stats(db: Session, test: Test) -> dict:
+    tqs: List[TestQuestion] = (
+        db.query(TestQuestion)
+        .filter(TestQuestion.test_id == test.id)
+        .order_by(TestQuestion.order.asc(), TestQuestion.id.asc())
+        .all()
+    )
+    max_score = sum(tq.points for tq in tqs) if tqs else 0
+
+    submissions: List[Submission] = (
+        db.query(Submission)
+        .join(User, Submission.user_id == User.id)
+        .filter(Submission.test_id == test.id, User.role == UserRole.STUDENT)
+        .order_by(Submission.id.desc())
+        .all()
+    )
+    latest_by_user: dict[int, Submission] = {}
+    for sub in submissions:
+        if sub.user_id not in latest_by_user:
+            latest_by_user[sub.user_id] = sub
+    submissions = list(latest_by_user.values())
+
+    sub_ids = [s.id for s in submissions]
+    answers_by_sub: dict[int, dict[int, Answer]] = {}
+    answers_by_question: dict[int, list[Answer]] = {}
+    if sub_ids:
+        answers = db.query(Answer).filter(Answer.submission_id.in_(sub_ids)).all()
+        for a in answers:
+            answers_by_sub.setdefault(a.submission_id, {})[a.question_id] = a
+            answers_by_question.setdefault(a.question_id, []).append(a)
+
+    user_ids = [s.user_id for s in submissions]
+    users_map: dict[int, User] = (
+        {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()}
+        if user_ids
+        else {}
+    )
+
+    question_stats = []
+    overall_correct = 0
+    overall_total = 0
+    for idx, tq in enumerate(tqs, 1):
+        q = getattr(tq, "question", None) or db.get(Question, tq.question_id)
+        text = (getattr(q, "text", "") or "").replace("\n", " ").strip()
+        if len(text) > 120:
+            text = text[:117] + "..."
+        ans_list = answers_by_question.get(tq.question_id, [])
+        total = len(ans_list)
+        correct = sum(1 for a in ans_list if getattr(a, "correct", False))
+        overall_total += total
+        overall_correct += correct
+        question_stats.append(
+            {
+                "order": idx,
+                "question": q,
+                "question_text": text,
+                "correct": correct,
+                "wrong": total - correct,
+                "total": total,
+                "points": tq.points,
+                "dots": [bool(getattr(a, "correct", False)) for a in ans_list],
+            }
+        )
+
+    student_rows = []
+    for sub in submissions:
+        u = users_map.get(sub.user_id)
+        if not u:
+            continue
+        ans_map = answers_by_sub.get(sub.id, {})
+        flags: list[bool] = []
+        for tq in tqs:
+            a = ans_map.get(tq.question_id)
+            flags.append(bool(a.correct) if a else False)
+        percent = None
+        if max_score:
+            percent = round(((sub.score or 0) / max_score) * 100, 1)
+        student_rows.append(
+            {
+                "user": u,
+                "submission": sub,
+                "score": sub.score or 0,
+                "max_score": max_score,
+                "percent": percent,
+                "answers": flags,
+            }
+        )
+
+    student_rows.sort(
+        key=lambda r: (
+            -(r["score"] or 0),
+            (getattr(r["user"], "full_name", "") or r["user"].email).lower(),
+        )
+    )
+
+    overall_wrong = max(overall_total - overall_correct, 0)
+
+    return {
+        "questions": tqs,
+        "max_score": max_score,
+        "submissions": submissions,
+        "users_map": users_map,
+        "question_stats": question_stats,
+        "student_rows": student_rows,
+        "overall": {
+            "total_answers": overall_total,
+            "correct": overall_correct,
+            "wrong": overall_wrong,
+            "accuracy": round((overall_correct / overall_total) * 100, 1)
+            if overall_total
+            else None,
+        },
+    }
+
+
+@router.get("/tests/{test_id}/stats", response_class=HTMLResponse)
+async def test_stats_view(
+    test_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    test = db.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="test not found")
+    stats = _collect_test_stats(db, test)
+    return templates.TemplateResponse(
+        "test_stats.html",
+        {
+            "request": request,
+            "user": user,
+            "test": test,
+            **stats,
+        },
+    )
+
+
+@router.get("/tests/{test_id}/stats/export")
+async def test_stats_export(
+    test_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    test = db.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="test not found")
+    stats = _collect_test_stats(db, test)
+    output = io.StringIO()
+    writer = csv.writer(output)
+    header = ["ФИО", "Почта", "Класс", "Баллы", "Максимум", "Процент"]
+    for qs in stats["question_stats"]:
+        header.append(f"Вопрос {qs['order']}")
+    writer.writerow(header)
+
+    for row in stats["student_rows"]:
+        u: User = row["user"]
+        percent = row["percent"] if row["percent"] is not None else ""
+        line = [
+            getattr(u, "full_name", "") or u.email,
+            u.email,
+            getattr(u, "student_class", "") or "",
+            row["score"],
+            row["max_score"],
+            percent,
+        ]
+        for flag in row["answers"]:
+            line.append(1 if flag else 0)
+        writer.writerow(line)
+
+    csv_bytes = output.getvalue().encode("utf-8-sig")
+    filename = f"test_{test.id}_stats.csv"
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename=\"{filename}\"'},
+    )
+
+
 @router.get("/tests/random", response_class=HTMLResponse)
 async def random_test_form(
     request: Request,
@@ -2500,6 +2714,28 @@ async def test_builder_edit_post(
     return redirect("/ui/tests")
 
 
+@router.post("/tests/{test_id}/delete", response_class=HTMLResponse)
+async def test_delete(
+    test_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("admin", "teacher")),
+):
+    test = db.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="test not found")
+    # удалить попытки и ответы
+    subs: List[Submission] = db.query(Submission).filter(Submission.test_id == test.id).all()
+    sub_ids = [s.id for s in subs]
+    if sub_ids:
+        db.query(Answer).filter(Answer.submission_id.in_(sub_ids)).delete(synchronize_session=False)
+        db.query(Submission).filter(Submission.id.in_(sub_ids)).delete(synchronize_session=False)
+    db.query(TestQuestion).filter(TestQuestion.test_id == test.id).delete()
+    db.delete(test)
+    db.commit()
+    return redirect("/ui/tests")
+
+
 @router.get("/tests/{test_id}", response_class=HTMLResponse)
 async def test_view(
     test_id: int,
@@ -2819,6 +3055,7 @@ async def submission_detail(
         your_answer = given_raw or "—"
         correct_answer = ""
         recomputed_points = 0
+        self_mark_allowed = (not can_edit) and student and student.id == user.id and q.answer_type == "text"
 
         if q.answer_type == "text":
             correct_answer = (q.correct or "") if hasattr(q, "correct") else ""
@@ -2860,13 +3097,17 @@ async def submission_detail(
                 "index": idx,
                 "question": q,
                 "your_answer": your_answer,
-                "correct_answer": correct_answer if show_correct else "—",
+                "correct_answer": correct_answer if (show_correct or self_mark_allowed) else "—",
                 "score": display_points or 0,
                 "max_points": getattr(link, "points", 0) or 0,
                 "question_id": q.id,
                 "answer_id": getattr(ans, "id", None) if ans else None,
+                "self_mark_allowed": self_mark_allowed,
+                "self_mark_state": bool(getattr(ans, "correct", False)) if ans else False,
             }
         )
+
+    show_self_mark_any = any(r.get("self_mark_allowed") for r in rows)
 
     return templates.TemplateResponse(
         "test_result.html",
@@ -2881,6 +3122,7 @@ async def submission_detail(
             "max_total": max_total,
             "can_edit": can_edit,
             "show_correct": show_correct,
+            "show_self_mark": show_self_mark_any,
         },
     )
 
@@ -2911,6 +3153,57 @@ async def submission_set_points(
     new_score = (
         db.query(Answer)
         .filter(Answer.submission_id == submission_id)
+        .with_entities(Answer.points)
+        .all()
+    )
+    sub.score = sum(p[0] or 0 for p in new_score)
+    db.add(sub)
+    db.commit()
+
+    return RedirectResponse(url=f"/ui/submissions/{submission_id}", status_code=303)
+
+
+@router.post("/submissions/{submission_id}/self-mark", response_class=HTMLResponse)
+async def submission_self_mark(
+    submission_id: int,
+    request: Request,
+    question_id: int = Form(...),
+    mark: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    sub = db.get(Submission, submission_id)
+    if not sub or sub.user_id != user.id:
+        raise HTTPException(status_code=404, detail="submission not found")
+
+    link = (
+        db.query(TestQuestion)
+        .filter(TestQuestion.test_id == sub.test_id, TestQuestion.question_id == question_id)
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="question not found in test")
+    q = db.get(Question, question_id)
+    if not q or q.answer_type != "text":
+        raise HTTPException(status_code=400, detail="self-mark allowed only for text questions")
+
+    ans = (
+        db.query(Answer)
+        .filter(Answer.submission_id == sub.id, Answer.question_id == question_id)
+        .first()
+    )
+    if not ans:
+        ans = Answer(submission_id=sub.id, question_id=question_id)
+
+    is_correct = mark == "correct"
+    ans.correct = is_correct
+    ans.points = getattr(link, "points", 0) if is_correct else 0
+    db.add(ans)
+
+    # пересчёт баллов попытки
+    new_score = (
+        db.query(Answer)
+        .filter(Answer.submission_id == sub.id)
         .with_entities(Answer.points)
         .all()
     )

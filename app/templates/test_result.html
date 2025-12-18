@@ -25,17 +25,18 @@
             <table class="result-table">
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Задача</th>
-                        <th>Ваш ответ</th>
+                    <th>#</th>
+                    <th>Задача</th>
+                    <th>Ваш ответ</th>
                     <th>Правильный ответ{% if not show_correct|default(true) %} (скрыто){% endif %}</th>
-                        <th>Баллы</th>
-                        {% if can_edit %}<th style="width: 160px;">Правка</th>{% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in rows %}
-                        <tr>
+                    <th>Баллы</th>
+                    {% if show_self_mark %}<th style="width: 180px;">Самооценка</th>{% endif %}
+                    {% if can_edit %}<th style="width: 160px;">Правка</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
                             <td>{{ row.index }}</td>
                             <td class="col-question">
                                 {{ row.question.text | replace('\n', '<br>') | safe }}
@@ -49,6 +50,20 @@
                                     {% endif %}
                                 </td>
                             <td>{{ row.score }} / {{ row.max_points }}</td>
+                            {% if show_self_mark %}
+                                <td>
+                                    {% if row.self_mark_allowed %}
+                                        <form method="post" action="/ui/submissions/{{ submission.id }}/self-mark" class="inline-form">
+                                            <input type="hidden" name="question_id" value="{{ row.question_id }}">
+                                            <button class="btn btn-sm {% if row.self_mark_state %}btn-primary{% endif %}" name="mark" value="correct" type="submit">Верно</button>
+                                            <button class="btn btn-sm {% if not row.self_mark_state %}btn-outline{% endif %}" name="mark" value="wrong" type="submit">Неверно</button>
+                                        </form>
+                                        <div class="muted" style="margin-top:4px;">Доступно только для текстовых вопросов.</div>
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                            {% endif %}
                             {% if can_edit %}
                             <td>
                                 <form method="post" action="/ui/submissions/{{ submission.id }}/set-points" class="inline-form">

@@ -39,6 +39,20 @@
     <hr style="border:none; border-top:1px solid rgba(148,163,184,0.35); margin:1.1rem 0;">
 
     <h2 style="font-size:1.0rem; margin-bottom:0.4rem;">Список пользователей</h2>
+    <div class="card card-dark mb-3" style="padding:12px;">
+        <h3 style="font-size:0.95rem; margin-bottom:0.3rem;">Сброс пароля</h3>
+        <form method="post" action="/ui/admin/users/reset-password" class="form">
+            <div class="field">
+                <label class="field-label">Почта пользователя</label>
+                <input type="text" name="email" required placeholder="user@example.com">
+            </div>
+            <div class="field">
+                <label class="field-label">Новый пароль</label>
+                <input type="password" name="new_password" required>
+            </div>
+            <button type="submit" class="btn btn-secondary btn-sm">Сбросить пароль</button>
+        </form>
+    </div>
 
     {% if users|length == 0 %}
         <p class="muted">Пользователей пока нет.</p>

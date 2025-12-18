@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Статистика теста «{{ test.title }}»{% endblock %}
+
+{% block content %}
+<style>
+.stat-card { padding: 14px; background: #0f172a; border: 1px solid rgba(148,163,184,0.2); border-radius: 10px; margin-bottom: 1rem; }
+.bar { position: relative; height: 12px; background: rgba(255,255,255,0.07); border-radius: 6px; overflow: hidden; }
+.bar-correct { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #22c55e, #16a34a); }
+.bar-wrong { position: absolute; top: 0; bottom: 0; background: linear-gradient(90deg, #ef4444, #b91c1c); right: 0; }
+.dot-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot-ok { background: #22c55e; }
+.dot-bad { background: #ef4444; }
+.table-sm th, .table-sm td { padding: 6px 8px; }
+.muted { color: #94a3b8; }
+.pill { display: inline-block; padding: 4px 8px; border-radius: 8px; background: rgba(255,255,255,0.08); }
+</style>
+
+<h1 class="page-title">Статистика теста «{{ test.title }}»</h1>
+
+<div class="stat-card">
+    <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-bottom:10px;">
+        <div class="pill">Участников: {{ student_rows|length }}</div>
+        <div class="pill">Ответов: {{ overall.total_answers }}</div>
+        <div class="pill">Верных: {{ overall.correct }}</div>
+        <div class="pill">Неверных: {{ overall.wrong }}</div>
+        <div class="pill">Точность: {% if overall.accuracy is not none %}{{ overall.accuracy }}%{% else %}—{% endif %}</div>
+        <div style="margin-left:auto;">
+            <a class="btn btn-secondary btn-sm" href="/ui/tests/{{ test.id }}/stats/export">Выгрузить CSV</a>
+        </div>
+    </div>
+    <div class="bar" aria-label="Общая диаграмма">
+        {% set total = overall.total_answers if overall.total_answers else 1 %}
+        {% set correct_pct = (overall.correct / total * 100) if overall.total_answers else 0 %}
+        <div class="bar-correct" style="width: {{ '%.1f' % correct_pct }}%;"></div>
+        <div class="bar-wrong" style="width: {{ '%.1f' % (100 - correct_pct) }}%;"></div>
+    </div>
+</div>
+
+<div class="stat-card">
+    <h2 style="font-size:1.05rem; margin-bottom:8px;">По вопросам</h2>
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th style="width:40px;">#</th>
+                <th>Вопрос</th>
+                <th style="width:110px;">Правильно</th>
+                <th style="width:110px;">Неверно</th>
+                <th style="width:120px;">Успех</th>
+                <th style="width:200px;">Точечная диаграмма</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for qs in question_stats %}
+            {% set total_q = qs.total if qs.total else 1 %}
+            {% set success = (qs.correct / total_q * 100) if qs.total else 0 %}
+            <tr>
+                <td>{{ qs.order }}</td>
+                <td>
+                    {% if qs.question %}{{ qs.question_text }}{% else %}<span class="muted">Удалён</span>{% endif %}
+                </td>
+                <td>{{ qs.correct }}</td>
+                <td>{{ qs.wrong }}</td>
+                <td>{{ '%.1f' % success }}%</td>
+                <td>
+                    {% if qs.dots %}
+                        <div class="dot-row">
+                            {% for d in qs.dots %}
+                                <span class="dot {% if d %}dot-ok{% else %}dot-bad{% endif %}"></span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <span class="muted">Нет ответов</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="stat-card">
+    <h2 style="font-size:1.05rem; margin-bottom:8px;">По ученикам</h2>
+    <div class="table-responsive">
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>ФИО</th>
+                <th>Почта</th>
+                <th style="width:120px;">Баллы</th>
+                <th style="width:90px;">%</th>
+                {% for qs in question_stats %}
+                    <th style="width:60px;">Q{{ qs.order }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in student_rows %}
+            <tr>
+                <td>{{ row.user.full_name or row.user.email }}</td>
+                <td class="muted">{{ row.user.email }}</td>
+                <td>{{ row.score }} / {{ row.max_score }}</td>
+                <td>{% if row.percent is not none %}{{ row.percent }}{% else %}—{% endif %}</td>
+                {% for flag in row.answers %}
+                    <td>{% if flag %}✓{% else %}—{% endif %}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            {% if student_rows|length == 0 %}
+                <tr><td colspan="{{ 4 + question_stats|length }}" class="muted">Пока нет попыток.</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{% endblock %}
