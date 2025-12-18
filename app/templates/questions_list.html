@@ -33,96 +33,100 @@
 
 {% if view_mode == 'category' %}
     {% for category, questions in library|dictsort %}
-    <div class="card card-dark mt-3">
-        <div class="card-body">
-            <h3 style="margin-bottom:0.6rem;">Категория: {{ category }}</h3>
-            <div class="table-responsive">
-                <table class="table table-dark table-striped table-sm align-middle">
-                    <thead>
-                        <tr>
-                            <th style="width:60px;">ID</th>
-                            <th>Текст</th>
-                            <th style="width:80px;">Класс</th>
-                            <th style="width:90px;">Год</th>
-                            <th style="width:120px;">Этап</th>
-                            <th style="width:120px;">Тип</th>
-                            {% if user and user.role in ["admin", "teacher"] %}<th style="width:180px;">Действия</th>{% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for q in questions %}
-                        <tr>
-                            <td>{{ q.id }}</td>
-                            <td>{{ q.text | truncate(160, True, '…') }}</td>
-                            <td>{{ q.grade or '—' }}</td>
-                            <td>{{ q.year or '—' }}</td>
-                            <td>{{ q.stage or '—' }}</td>
-                            <td>{% if q.answer_type == "single" %}Один верный{% else %}Несколько верных{% endif %}</td>
-                            {% if user and user.role in ["admin", "teacher"] %}
-                            <td>
-                                <a href="/ui/questions/{{ q.id }}/edit" class="btn btn-sm btn-outline-light">Редактировать</a>
-                                <form method="post"
-                                      action="/ui/questions/{{ q.id }}/delete"
-                                      style="display:inline-block"
-                                      onsubmit="return confirm('Удалить вопрос #{{ q.id }}?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
-                                </form>
-                            </td>
-                            {% endif %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <details class="lib-level lib-category">
+        <summary class="lib-summary"><strong>Категория:</strong> {{ category }}</summary>
+        <div class="card card-dark mt-2">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width:60px;">ID</th>
+                                <th>Текст</th>
+                                <th style="width:80px;">Класс</th>
+                                <th style="width:90px;">Год</th>
+                                <th style="width:120px;">Этап</th>
+                                <th style="width:120px;">Тип</th>
+                                {% if user and user.role in ["admin", "teacher"] %}<th style="width:180px;">Действия</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for q in questions %}
+                            <tr>
+                                <td>{{ q.id }}</td>
+                                <td>{{ q.text | truncate(160, True, '…') }}</td>
+                                <td>{{ q.grade or '—' }}</td>
+                                <td>{{ q.year or '—' }}</td>
+                                <td>{{ q.stage or '—' }}</td>
+                                <td>{% if q.answer_type == "single" %}Один верный{% else %}Несколько верных{% endif %}</td>
+                                {% if user and user.role in ["admin", "teacher"] %}
+                                <td>
+                                    <a href="/ui/questions/{{ q.id }}/edit" class="btn btn-sm btn-outline-light">Редактировать</a>
+                                    <form method="post"
+                                          action="/ui/questions/{{ q.id }}/delete"
+                                          style="display:inline-block"
+                                          onsubmit="return confirm('Удалить вопрос #{{ q.id }}?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                                    </form>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
+    </details>
     {% endfor %}
 
 {% elif view_mode == 'grade' %}
     {% for grade, questions in library|dictsort %}
-    <div class="card card-dark mt-3">
-        <div class="card-body">
-            <h3 style="margin-bottom:0.6rem;">Класс: {{ grade }}</h3>
-            <div class="table-responsive">
-                <table class="table table-dark table-striped table-sm align-middle">
-                    <thead>
-                        <tr>
-                            <th style="width:60px;">ID</th>
-                            <th>Текст</th>
-                            <th style="width:180px;">Категория</th>
-                            <th style="width:90px;">Год</th>
-                            <th style="width:120px;">Этап</th>
-                            <th style="width:120px;">Тип</th>
-                            {% if user and user.role in ["admin", "teacher"] %}<th style="width:180px;">Действия</th>{% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for q in questions %}
-                        <tr>
-                            <td>{{ q.id }}</td>
-                            <td>{{ q.text | truncate(160, True, '…') }}</td>
-                            <td>{{ q.category or '—' }}</td>
-                            <td>{{ q.year or '—' }}</td>
-                            <td>{{ q.stage or '—' }}</td>
-                            <td>{% if q.answer_type == "single" %}Один верный{% else %}Несколько верных{% endif %}</td>
-                            {% if user and user.role in ["admin", "teacher"] %}
-                            <td>
-                                <a href="/ui/questions/{{ q.id }}/edit" class="btn btn-sm btn-outline-light">Редактировать</a>
-                                <form method="post"
-                                      action="/ui/questions/{{ q.id }}/delete"
-                                      style="display:inline-block"
-                                      onsubmit="return confirm('Удалить вопрос #{{ q.id }}?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
-                                </form>
-                            </td>
-                            {% endif %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <details class="lib-level lib-grade">
+        <summary class="lib-summary"><strong>Класс:</strong> {{ grade }}</summary>
+        <div class="card card-dark mt-2">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width:60px;">ID</th>
+                                <th>Текст</th>
+                                <th style="width:180px;">Категория</th>
+                                <th style="width:90px;">Год</th>
+                                <th style="width:120px;">Этап</th>
+                                <th style="width:120px;">Тип</th>
+                                {% if user and user.role in ["admin", "teacher"] %}<th style="width:180px;">Действия</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for q in questions %}
+                            <tr>
+                                <td>{{ q.id }}</td>
+                                <td>{{ q.text | truncate(160, True, '…') }}</td>
+                                <td>{{ q.category or '—' }}</td>
+                                <td>{{ q.year or '—' }}</td>
+                                <td>{{ q.stage or '—' }}</td>
+                                <td>{% if q.answer_type == "single" %}Один верный{% else %}Несколько верных{% endif %}</td>
+                                {% if user and user.role in ["admin", "teacher"] %}
+                                <td>
+                                    <a href="/ui/questions/{{ q.id }}/edit" class="btn btn-sm btn-outline-light">Редактировать</a>
+                                    <form method="post"
+                                          action="/ui/questions/{{ q.id }}/delete"
+                                          style="display:inline-block"
+                                          onsubmit="return confirm('Удалить вопрос #{{ q.id }}?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Удалить</button>
+                                    </form>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
+    </details>
     {% endfor %}
 
 {% else %}
@@ -226,16 +230,19 @@
     .lib-summary::-webkit-details-marker {
         display: none;
     }
-    .lib-summary::before {
-        content: "›";
-        display: inline-block;
-        margin-right: 0.4rem;
-        transition: transform 0.15s ease-out;
-        opacity: 0.7;
-    }
-    details[open] > .lib-summary::before {
-        transform: rotate(90deg);
-    }
+.lib-summary::before {
+    content: "›";
+    display: inline-block;
+    margin-right: 0.4rem;
+    transition: transform 0.15s ease-out;
+    opacity: 0.7;
+}
+details[open] > .lib-summary::before {
+    transform: rotate(90deg);
+}
+.lib-summary {
+    padding: 6px 0;
+}
 </style>
 
 {% endif %}
