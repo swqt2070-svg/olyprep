@@ -389,9 +389,15 @@ async def login_submit(
 
 @router.get("/register", response_class=HTMLResponse)
 async def register_page(request: Request):
+    # Регистрация отключена, отправляем на страницу логина с подсказкой
     return templates.TemplateResponse(
-        "register.html",
-        {"request": request, "user": None, "error": None, "success": None},
+        "login.html",
+        {
+            "request": request,
+            "user": None,
+            "error": "Регистрация отключена. Обратитесь к администратору.",
+        },
+        status_code=400,
     )
 
 
@@ -405,6 +411,16 @@ async def register_submit(
     student_class: str = Form(""),
     db: Session = Depends(get_db),
 ):
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "user": None,
+            "error": "Регистрация отключена. Обратитесь к администратору.",
+        },
+        status_code=400,
+    )
+
     email = email.strip()
     invite_code = invite_code.strip()
     full_name = full_name.strip()
